@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"interview-guide-go/internal/application/interview/model/results"
 	"interview-guide-go/internal/application/interview/service"
 	domainiv "interview-guide-go/internal/domain/interview"
 	"interview-guide-go/internal/infrastructure/ai"
 	"interview-guide-go/internal/infrastructure/ai/promptprofile"
-	"interview-guide-go/internal/interfaces/api/dto"
 	"interview-guide-go/shared/errmsg"
 	"interview-guide-go/shared/logmsg"
 	"interview-guide-go/shared/streamkey"
@@ -210,7 +210,7 @@ func processInterviewEvaluateMessage(ctx context.Context, rdb *redis.Client, pro
 	}
 
 	// 加载题目
-	var qs []dto.InterviewQuestion
+	var qs []results.InterviewQuestion
 	// 如果题目 JSON 不为空，则解析题目
 	if raw := strings.TrimSpace(sess.QuestionsJSON); raw != "" {
 		// 如果解析失败，则标记评估失败并记录日志
@@ -242,7 +242,8 @@ func processInterviewEvaluateMessage(ctx context.Context, rdb *redis.Client, pro
 	// 合并题目答案
 	for _, a := range answers {
 		if a.QuestionIndex >= 0 && a.QuestionIndex < len(qs) {
-			qs[a.QuestionIndex].UserAnswer = a.UserAnswer
+			ua := a.UserAnswer
+			qs[a.QuestionIndex].UserAnswer = &ua
 		}
 	}
 
@@ -268,7 +269,7 @@ func processInterviewEvaluateMessage(ctx context.Context, rdb *redis.Client, pro
 	actx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	aiStart := time.Now()
 
-	// 评估面试 (对整场面试打分并生成 dto.InterviewReport)
+	// 评估面试 (对整场面试打分并生成 results.InterviewReport)
 	report, evalErr := eval.EvaluateInterview(actx, sid, resumeText, interviewerRole, qs)
 	cancel() // 结束计时
 	evalElapsed := time.Since(aiStart)
@@ -282,7 +283,7 @@ func processInterviewEvaluateMessage(ctx context.Context, rdb *redis.Client, pro
 	}
 
 	// 转换为 application 层模型
-	appRep := evaluationReportFromDTO(&report)
+	appRep := evaluationReportFromResults(&report)
 	// 保存评估结果
 	if err := proc.WorkerSaveEvaluationResult(ctx, sess.ID, appRep); err != nil {
 		_ = proc.WorkerMarkEvaluateFailed(ctx, sess.ID, "保存报告: "+interviewEvalErrorMessage(err))

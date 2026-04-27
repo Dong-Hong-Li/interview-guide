@@ -2,10 +2,10 @@ package redisstream
 
 import (
 	ivmodel "interview-guide-go/internal/application/interview/model"
-	"interview-guide-go/internal/interfaces/api/dto"
+	"interview-guide-go/internal/application/interview/model/results"
 )
 
-func evaluationReportFromDTO(r *dto.InterviewReport) *ivmodel.EvaluationReport {
+func evaluationReportFromResults(r *results.InterviewReport) *ivmodel.EvaluationReport {
 	if r == nil {
 		return nil
 	}

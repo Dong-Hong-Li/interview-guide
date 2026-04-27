@@ -16,8 +16,8 @@ import (
 	constpkg "github.com/openai/openai-go/shared/constant"
 	"go.uber.org/zap"
 
+	"interview-guide-go/internal/application/interview/model/results"
 	"interview-guide-go/internal/infrastructure/ai/promptprofile"
-	"interview-guide-go/internal/interfaces/api/dto"
 )
 
 // 与 Java AnswerEvaluationService.EvaluationReportDTO + BeanOutputConverter 对齐的批次 JSON 契约（非完整 InterviewReport）。
@@ -50,6 +50,14 @@ type cachedInterviewEvalPrompts struct {
 }
 
 var interviewEvalPromptCache sync.Map
+
+// interviewQuestionUserAnswerStr 将题目中的用户作答（JSON 反序列化后为 *string）转为用于 LLM 与报告落库的纯文本。
+func interviewQuestionUserAnswerStr(q results.InterviewQuestion) string {
+	if q.UserAnswer == nil {
+		return ""
+	}
+	return strings.TrimSpace(*q.UserAnswer)
+}
 
 // InterviewEvaluator 对齐 Java AnswerEvaluationService：分批评估 + 二次汇总 + convertToReport。
 type InterviewEvaluator struct {
@@ -156,9 +164,9 @@ type interviewFinalSummaryDTO struct {
 	Improvements    []string `json:"improvements"`
 }
 
-// EvaluateInterview 对整场面试打分并生成 dto.InterviewReport（sessionPublicID 写入报告）。
-func (e *InterviewEvaluator) EvaluateInterview(ctx context.Context, sessionPublicID, resumeText, interviewerRole string, questions []dto.InterviewQuestion) (dto.InterviewReport, error) {
-	var empty dto.InterviewReport
+// EvaluateInterview 对整场面试打分并生成 results.InterviewReport（sessionPublicID 写入报告）。
+func (e *InterviewEvaluator) EvaluateInterview(ctx context.Context, sessionPublicID, resumeText, interviewerRole string, questions []results.InterviewQuestion) (results.InterviewReport, error) {
+	var empty results.InterviewReport
 	if e == nil {
 		return empty, fmt.Errorf("nil evaluator")
 	}
@@ -199,7 +207,7 @@ func (e *InterviewEvaluator) EvaluateInterview(ctx context.Context, sessionPubli
 	return convertInterviewEvalToReport(sid, merged, questions, final.OverallFeedback, final.Strengths, final.Improvements), nil
 }
 
-func (e *InterviewEvaluator) evaluateInBatches(ctx context.Context, sessionPublicID, resumeSummary string, questions []dto.InterviewQuestion, prompts cachedInterviewEvalPrompts) ([]interviewBatchEvalResult, error) {
+func (e *InterviewEvaluator) evaluateInBatches(ctx context.Context, sessionPublicID, resumeSummary string, questions []results.InterviewQuestion, prompts cachedInterviewEvalPrompts) ([]interviewBatchEvalResult, error) {
 	var out []interviewBatchEvalResult
 	for start := 0; start < len(questions); start += e.batchSize {
 		end := start + e.batchSize
@@ -216,10 +224,10 @@ func (e *InterviewEvaluator) evaluateInBatches(ctx context.Context, sessionPubli
 	return out, nil
 }
 
-func buildInterviewQARecords(qs []dto.InterviewQuestion) string {
+func buildInterviewQARecords(qs []results.InterviewQuestion) string {
 	var b strings.Builder
 	for _, q := range qs {
-		ua := strings.TrimSpace(q.UserAnswer)
+		ua := interviewQuestionUserAnswerStr(q)
 		if ua == "" {
 			ua = "(未回答)"
 		}
@@ -232,7 +240,7 @@ func buildInterviewQARecords(qs []dto.InterviewQuestion) string {
 	return b.String()
 }
 
-func (e *InterviewEvaluator) evaluateBatch(ctx context.Context, sessionPublicID, resumeSummary string, batch []dto.InterviewQuestion, start, end int, prompts cachedInterviewEvalPrompts) (interviewBatchEvalReport, error) {
+func (e *InterviewEvaluator) evaluateBatch(ctx context.Context, sessionPublicID, resumeSummary string, batch []results.InterviewQuestion, start, end int, prompts cachedInterviewEvalPrompts) (interviewBatchEvalReport, error) {
 	var empty interviewBatchEvalReport
 	qa := buildInterviewQARecords(batch)
 	user := strings.ReplaceAll(prompts.evalUser, "{resumeText}", resumeSummary)
@@ -367,7 +375,7 @@ func mergeInterviewListItems(batchResults []interviewBatchEvalResult, strengthsM
 func (e *InterviewEvaluator) summarizeBatchResults(
 	ctx context.Context,
 	resumeSummary string,
-	questions []dto.InterviewQuestion,
+	questions []results.InterviewQuestion,
 	evaluations []interviewBatchQuestionEval,
 	fallbackFB string,
 	fallbackSt, fallbackIm []string,
@@ -387,16 +395,16 @@ func (e *InterviewEvaluator) summarizeBatchResults(
 		return interviewFinalSummaryDTO{}, err
 	}
 	raw = extractJSONObject(raw)
-	var dto interviewFinalSummaryDTO
-	if err := json.Unmarshal([]byte(raw), &dto); err != nil {
+	var parsed interviewFinalSummaryDTO
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return interviewFinalSummaryDTO{}, err
 	}
-	fb := strings.TrimSpace(dto.OverallFeedback)
+	fb := strings.TrimSpace(parsed.OverallFeedback)
 	if fb == "" {
 		fb = fallbackFB
 	}
-	st := sanitizeInterviewSummaryItems(dto.Strengths, fallbackSt)
-	im := sanitizeInterviewSummaryItems(dto.Improvements, fallbackIm)
+	st := sanitizeInterviewSummaryItems(parsed.Strengths, fallbackSt)
+	im := sanitizeInterviewSummaryItems(parsed.Improvements, fallbackIm)
 	return interviewFinalSummaryDTO{OverallFeedback: fb, Strengths: st, Improvements: im}, nil
 }
 
@@ -424,7 +432,7 @@ func sanitizeInterviewSummaryItems(primary, fallback []string) []string {
 	return out
 }
 
-func buildInterviewCategorySummaryText(questions []dto.InterviewQuestion, evaluations []interviewBatchQuestionEval) string {
+func buildInterviewCategorySummaryText(questions []results.InterviewQuestion, evaluations []interviewBatchQuestionEval) string {
 	type bucket struct {
 		scores []int
 	}
@@ -440,7 +448,7 @@ func buildInterviewCategorySummaryText(questions []dto.InterviewQuestion, evalua
 			m[cat] = b
 		}
 		score := 0
-		if i < len(evaluations) && strings.TrimSpace(q.UserAnswer) != "" {
+		if i < len(evaluations) && interviewQuestionUserAnswerStr(q) != "" {
 			score = evaluations[i].Score
 		}
 		b.scores = append(b.scores, score)
@@ -467,7 +475,7 @@ func buildInterviewCategorySummaryText(questions []dto.InterviewQuestion, evalua
 	return strings.Join(lines, "\n")
 }
 
-func buildInterviewQuestionHighlightsText(questions []dto.InterviewQuestion, evaluations []interviewBatchQuestionEval) string {
+func buildInterviewQuestionHighlightsText(questions []results.InterviewQuestion, evaluations []interviewBatchQuestionEval) string {
 	var lines []string
 	for i, q := range questions {
 		if len(lines) >= 20 {
@@ -494,17 +502,17 @@ func buildInterviewQuestionHighlightsText(questions []dto.InterviewQuestion, eva
 func convertInterviewEvalToReport(
 	sessionPublicID string,
 	evaluations []interviewBatchQuestionEval,
-	questions []dto.InterviewQuestion,
+	questions []results.InterviewQuestion,
 	overallFeedback string,
 	strengths, improvements []string,
-) dto.InterviewReport {
-	var qDetails []dto.InterviewQuestionEval
-	var refAnswers []dto.InterviewReferenceAnswer
+) results.InterviewReport {
+	var qDetails []results.QuestionEvaluation
+	var refAnswers []results.ReferenceAnswer
 	catMap := make(map[string][]int)
 
 	answered := 0
 	for _, q := range questions {
-		if strings.TrimSpace(q.UserAnswer) != "" {
+		if interviewQuestionUserAnswerStr(q) != "" {
 			answered++
 		}
 	}
@@ -528,7 +536,7 @@ func convertInterviewEvalToReport(
 				keyPts = []string{}
 			}
 		}
-		hasAnswer := strings.TrimSpace(q.UserAnswer) != ""
+		hasAnswer := interviewQuestionUserAnswerStr(q) != ""
 		score := 0
 		if hasAnswer && ev != nil {
 			score = ev.Score
@@ -537,15 +545,15 @@ func convertInterviewEvalToReport(
 		if cat == "" {
 			cat = "综合"
 		}
-		qDetails = append(qDetails, dto.InterviewQuestionEval{
+		qDetails = append(qDetails, results.QuestionEvaluation{
 			QuestionIndex: q.QuestionIndex,
 			Question:      q.Question,
 			Category:      cat,
-			UserAnswer:    q.UserAnswer,
+			UserAnswer:    interviewQuestionUserAnswerStr(q),
 			Score:         score,
 			Feedback:      feedback,
 		})
-		refAnswers = append(refAnswers, dto.InterviewReferenceAnswer{
+		refAnswers = append(refAnswers, results.ReferenceAnswer{
 			QuestionIndex:   q.QuestionIndex,
 			Question:        q.Question,
 			ReferenceAnswer: refText,
@@ -559,7 +567,7 @@ func convertInterviewEvalToReport(
 		cats = append(cats, c)
 	}
 	sort.Strings(cats)
-	var catScores []dto.InterviewCategoryScore
+	var catScores []results.InterviewCategoryScore
 	for _, c := range cats {
 		arr := catMap[c]
 		sum := 0
@@ -570,7 +578,7 @@ func convertInterviewEvalToReport(
 		if len(arr) > 0 {
 			avg = sum / len(arr)
 		}
-		catScores = append(catScores, dto.InterviewCategoryScore{
+		catScores = append(catScores, results.InterviewCategoryScore{
 			Category:      c,
 			Score:         avg,
 			QuestionCount: len(arr),
@@ -594,7 +602,7 @@ func convertInterviewEvalToReport(
 		improvements = []string{}
 	}
 
-	return dto.InterviewReport{
+	return results.InterviewReport{
 		SessionID:        sessionPublicID,
 		TotalQuestions:   len(questions),
 		OverallScore:     overall,
