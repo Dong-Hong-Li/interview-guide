@@ -1,0 +1,67 @@
+# 本文件不出现具体配置值：全部通过「系统环境变量」或仓库根目录 .env 的 ${VAR} 插值。
+# server 容器：先加载 .env，再用 .env.docker 覆盖（容器内需使用 compose 服务名，见该文件注释）。
+
+services:
+  rustfs:
+    image: ${RUSTFS_IMAGE}
+    container_name: ${RUSTFS_CONTAINER_NAME}
+    ports:
+      - "${RUSTFS_PUBLISH_PORT_9000}:9000"
+      - "${RUSTFS_PUBLISH_PORT_9001}:9001"
+    volumes:
+      - "${RUSTFS_DATA_HOST_PATH}:/data"
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: ${RUSTFS_CONSOLE_ENABLE}
+    command: ["--console-enable", "/data"]
+
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PUBLISH_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - "${POSTGRES_INIT_SCHEMA_REL_PATH}:/docker-entrypoint-initdb.d:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: ${REDIS_IMAGE}
+    ports:
+      - "${REDIS_PUBLISH_PORT}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: ${SERVER_BUILD_CONTEXT}
+      dockerfile: ${SERVER_DOCKERFILE}
+    ports:
+      - "${SERVER_PUBLISH_PORT}:${SERVER_CONTAINER_PORT}"
+    env_file:
+      - .env
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
