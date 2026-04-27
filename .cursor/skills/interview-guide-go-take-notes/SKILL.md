@@ -22,13 +22,14 @@ description: Encodes architecture, coding conventions, and workflow rules for th
 1. **层界单向**：`application/*` 禁止 import `infrastructure/*`；`domain/*` 禁止 import 应用层与基础设施；`shared/*` 禁止 import `internal/*`；`infrastructure/*` 禁止 import `internal/interfaces/*`。具体实现一律由 `repository/*Port` 接口反转 + `cmd/server/wire.go` 装配。
 2. **零字面量散落**：所有错误文案放 `shared/errmsg/*.go`；所有日志 message/key 放 `shared/logmsg/logmsg.go`；所有 Stream 名/Group 名/字段名放 `shared/streamkey/streamkey.go`；所有 ENV 解析在 `internal/config/*`，业务包内**禁止** `os.Getenv`。
 3. **文档同步硬绑定**：改了路由/端口/状态机/配置 → 同 PR 改 `docs/项目架构.md` 与 `docs/开发进度.md`，并把 `开发进度.md` 第 6 行「文档同步日期」更新为合并日。
+4. **入参校验只在 Controller**：`application/<domain>/service` **不校验** HTTP/前端原始入参；**全部在 `controller` 完成**后封装 `model.Validated*` 再入 service。细则见 `docs/开发规范.md` §3.2、§4.3。
 
 ## 2. 任务路由（按编辑意图选）
 
 | 编辑意图 | 必读 | 关键约束 |
 |---------|------|---------|
-| 新增/修改 HTTP 端点 | `conventions.md §HTTP` + `architecture.md §HTTP` | path 常量进 `controller/api.go`；用 `binding.Handle[Req,Resp]`；入参在 `model/request_param.go`；过校验后封 `Validated*` 传 service；错误用 `response.Err`/`BizErr` |
-| 新增应用服务/用例 | `conventions.md §服务` | 一用例一文件；构造函数 `NewXService(...)`；只依赖 `repository/*Port`；长跑路径 `context.WithoutCancel(ctx) + WithTimeout` |
+| 新增/修改 HTTP 端点 | `conventions.md §HTTP` + `architecture.md §HTTP` | path 常量进 `controller/api.go`；用 `binding.Handle[Req,Resp]`；**在 controller 完成全部 HTTP 入参校验**；封 `Validated*` 传 service；错误用 `response.Err`/`BizErr` |
+| 新增应用服务/用例 | `conventions.md §服务` | 一用例一文件；构造函数 `NewXService(...)`；**只接 `Validated*` 等已就绪入参，不重复 HTTP 校验**；只依赖 `repository/*Port`；长跑路径 `context.WithoutCancel(ctx) + WithTimeout` |
 | 新增仓储端口/实现 | `conventions.md §端口与适配器` | 端口在 `application/<domain>/repository/*.go`；Mapper 在 `infrastructure/postgres/mapper/`；末尾加 `var _ repository.X = (*XMapper)(nil)`；GORM 模型只在 `grom/` 包内出现 |
 | 改 Wire 装配 | `conventions.md §Wire` | 改 `cmd/server/wire.go` 后必须在 `cmd/server/` 下跑 `wire`；`wire_gen.go` 与业务变更**拆分** commit；接口冲突走 `wire.Bind`，nil 兜底走专门 `provideXxx` |
 | 改 Redis Stream 消费者 | `architecture.md §异步链路` | 文件 `<scenario>_consumer.go`；`ensure*Group` 处理 BUSYGROUP/NOGROUP；处理失败必须 `MarkXxxFailed` 后再 `XAck`；消费者名带 PID |

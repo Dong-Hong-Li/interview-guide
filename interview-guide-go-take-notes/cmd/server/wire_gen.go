@@ -14,6 +14,9 @@ import (
 	controller2 "interview-guide-go/internal/application/interview/controller"
 	repository2 "interview-guide-go/internal/application/interview/repository"
 	service2 "interview-guide-go/internal/application/interview/service"
+	controller3 "interview-guide-go/internal/application/knowledgebase/controller"
+	repository3 "interview-guide-go/internal/application/knowledgebase/repository"
+	service3 "interview-guide-go/internal/application/knowledgebase/service"
 	"interview-guide-go/internal/application/resume/controller"
 	"interview-guide-go/internal/application/resume/repository"
 	"interview-guide-go/internal/application/resume/service"
@@ -90,6 +93,19 @@ func initializeInterviewController(lg *zap.Logger, db *gorm.DB, rdb *redis.Clien
 	return interviewController
 }
 
+// initializeKnowledgeBaseController 知识库域（/api/knowledgebase/*），与 initializeResumeController 同形参以复用 StartDeps 注入。
+func initializeKnowledgeBaseController(cfg *config.Config, lg *zap.Logger, db *gorm.DB, rdb *redis.Client, storeSvc *storage.StorageService) *controller3.KnowledgeBaseController {
+	v := adapter.NewObjectStorageAdapter(storeSvc)
+	knowledgeBaseMapper := mapper.NewKnowledgeBaseMapper(db)
+	vectorizeTaskPublisher := adapter3.NewKnowledgeVectorizePublisher(rdb)
+	knowledgeTextExtractor := adapter2.NewKnowledgeTextExtractor()
+	uploadKnowledgeBaseService := service3.NewUploadKnowledgeBaseService(v, knowledgeBaseMapper, vectorizeTaskPublisher, knowledgeTextExtractor)
+	knowledgeBaseController := &controller3.KnowledgeBaseController{
+		UploadService: uploadKnowledgeBaseService,
+	}
+	return knowledgeBaseController
+}
+
 // wire.go:
 
 // 一捆「能生产东西的函数」，Wire 会在这捆里解依赖图。
@@ -101,6 +117,9 @@ var resumeModuleSet = wire.NewSet(
 var interviewModuleSet = wire.NewSet(mapper.NewResumeMapper, wire.Bind(new(repository2.InterviewerRoleReader), new(*mapper.ResumeMapper)), wire.Bind(new(repository2.ResumeTextSource), new(*mapper.ResumeMapper)), mapper.NewInterviewMapper, wire.Bind(new(repository2.InterviewSessionWriter), new(*mapper.InterviewMapper)), adapter3.NewEvaluateEnqueue, wire.Bind(new(repository2.InterviewEvaluateEnqueuer), new(*adapter3.EvaluateEnqueue)), provideInterviewSessionCache,
 	provideInterviewQuestionGenerator, service2.NewCreateInterviewService, service2.NewUnfinishedSessionService, service2.NewCurrentQuestionService, service2.NewSubmitAnswerService, service2.NewListInterviewSessionsService, service2.NewReportService, service2.NewGetInterviewDetailService, service2.NewGetSessionService, service2.NewCompleteSessionService, service2.NewDeleteInterviewService, wire.Struct(new(controller2.InterviewController), "*"),
 )
+
+// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）与其它端点仍多为占位。
+var knowledgeModuleSet = wire.NewSet(mapper.NewKnowledgeBaseMapper, wire.Bind(new(repository3.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)), adapter.NewObjectStorageAdapter, adapter2.NewKnowledgeTextExtractor, adapter3.NewKnowledgeVectorizePublisher, service3.NewUploadKnowledgeBaseService, wire.Struct(new(controller3.KnowledgeBaseController), "*"))
 
 // provideMaxResumeUploadBytes 抽取 cfg 字段给 ResumeUploadService 用，避免 wire 直接把 cfg.Xxx 当 int64 provider。
 func provideMaxResumeUploadBytes(cfg *config.Config) int64 {

@@ -19,6 +19,9 @@ import (
 	ivctl "interview-guide-go/internal/application/interview/controller"
 	ivrepo "interview-guide-go/internal/application/interview/repository"
 	"interview-guide-go/internal/application/interview/service"
+	kbctl "interview-guide-go/internal/application/knowledgebase/controller"
+	kbrepo "interview-guide-go/internal/application/knowledgebase/repository"
+	kbsvc "interview-guide-go/internal/application/knowledgebase/service"
 	resume "interview-guide-go/internal/application/resume/controller"
 	resumerepo "interview-guide-go/internal/application/resume/repository"
 	resumesvc "interview-guide-go/internal/application/resume/service"
@@ -74,6 +77,17 @@ var interviewModuleSet = wire.NewSet(
 	wire.Struct(new(ivctl.InterviewController), "*"),
 )
 
+// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）与其它端点仍多为占位。
+var knowledgeModuleSet = wire.NewSet(
+	mapper.NewKnowledgeBaseMapper,
+	wire.Bind(new(kbrepo.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)),
+	storageadapter.NewObjectStorageAdapter,
+	fileadapter.NewKnowledgeTextExtractor,
+	redisadapter.NewKnowledgeVectorizePublisher,
+	kbsvc.NewUploadKnowledgeBaseService,
+	wire.Struct(new(kbctl.KnowledgeBaseController), "*"),
+)
+
 // provideMaxResumeUploadBytes 抽取 cfg 字段给 ResumeUploadService 用，避免 wire 直接把 cfg.Xxx 当 int64 provider。
 func provideMaxResumeUploadBytes(cfg *config.Config) int64 {
 	return cfg.MaxResumeUploadBytes
@@ -115,4 +129,15 @@ func initializeInterviewController(
 	cfg *config.Config,
 ) *ivctl.InterviewController {
 	panic(wire.Build(interviewModuleSet))
+}
+
+// initializeKnowledgeBaseController 知识库域（/api/knowledgebase/*），与 initializeResumeController 同形参以复用 StartDeps 注入。
+func initializeKnowledgeBaseController(
+	cfg *config.Config,
+	lg *zap.Logger,
+	db *gorm.DB,
+	rdb *redis.Client,
+	storeSvc *storage.StorageService,
+) *kbctl.KnowledgeBaseController {
+	panic(wire.Build(knowledgeModuleSet))
 }

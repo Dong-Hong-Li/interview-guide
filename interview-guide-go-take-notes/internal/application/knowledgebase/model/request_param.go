@@ -27,5 +27,13 @@ type KBUpdateCategoryReq struct {
 	Category string `json:"category"`
 }
 
-// KBPostUploadNoBody POST /knowledgebase/upload 占位，实现 multipart 时再接真实字段。
-type KBPostUploadNoBody struct{}
+// KBPostUploadRequest POST /api/knowledgebase/upload，Content-Type: multipart/form-data。
+// 与 Java KnowledgeBaseController.uploadKnowledgeBase（file、name、category）及前端 knowledgeBaseApi.uploadKnowledgeBase 一致。
+// binding：[]byte + form:"file" 读文件体；Filename/ContentType 由文件头自动填充（勿手填）；name、category 为普通 form 字段。
+type KBPostUploadRequest struct {
+	Filename    string `json:"filename" form:"-"`
+	ContentType string `json:"content_type" form:"-"`
+	Content     []byte `json:"content" form:"file" validate:"required"`
+	Name        string `json:"name" form:"name"`
+	Category    string `json:"category" form:"category"`
+}

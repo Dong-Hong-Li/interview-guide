@@ -20,6 +20,18 @@ const (
 
 	MsgInterviewEvaluateConsumerEnabled = "面试评估后台消费者已启用"
 
+	MsgKnowledgeVectorizeCreateGroup     = "知识库向量化：创建 Redis Stream 消费者组失败"
+	MsgKnowledgeVectorizeConsumerStarted = "知识库向量化消费者已启动"
+	MsgKnowledgeVectorizeConsumerStopped = "知识库向量化消费者已停止"
+	MsgKnowledgeVectorizeXRead           = "知识库向量化：XREADGROUP 读队列异常"
+	MsgKnowledgeVectorizeSkipBad         = "知识库向量化：跳过无效队列消息（缺 kbId 或正文）"
+	MsgKnowledgeVectorizeLoadMeta        = "知识库向量化：查询元数据失败"
+	MsgKnowledgeVectorizeRowGone         = "知识库向量化：记录已不存在，跳过"
+	MsgKnowledgeVectorizeAlreadyDone     = "知识库向量化：已是 COMPLETED，跳过"
+	MsgKnowledgeVectorizePersist         = "知识库向量化：回写 COMPLETED 失败"
+	MsgKnowledgeVectorizeDone            = "知识库向量化：本条任务处理成功"
+	MsgKnowledgeVectorizeConsumerEnabled = "知识库向量化后台消费者已启用"
+
 	MsgInterviewQuestionLLMOK       = "面试出题：LLM 生成题目成功"
 	MsgInterviewQuestionLLMDegraded = "面试出题：LLM 调用失败已使用默认题"
 	MsgInterviewQuestionLLMBegin    = "面试出题：开始调用模型生成题目"

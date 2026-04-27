@@ -107,3 +107,23 @@ func extractViaTabula(content []byte, ext string) string {
 	}
 	return text
 }
+
+// ExtractKnowledgeBaseText 从知识库 supported 原件抽取纯文本：TXT/MD 直接按 UTF-8；PDF/DOCX 等同简历路径。
+func ExtractKnowledgeBaseText(content []byte, filename, contentType string) string {
+	if len(content) == 0 {
+		return ""
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if i := strings.Index(ct, ";"); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	switch {
+	case ext == ".txt" || ext == ".md":
+		return strings.TrimSpace(string(content))
+	case strings.HasPrefix(ct, "text/plain"), strings.HasPrefix(ct, "text/markdown"):
+		return strings.TrimSpace(string(content))
+	default:
+		return ExtractResumeText(content, filename, contentType)
+	}
+}

@@ -48,3 +48,15 @@ const (
 	// StreamFieldRetryCount 简历分析异步生成 Retry Count
 	StreamFieldRetryCount = "retryCount"
 )
+
+// 知识库向量化异步任务 Stream / 组 / 字段（与 Java AsyncTaskStreamConstants.KB_VECTORIZE 对齐语义）。
+const (
+	// StreamKnowledgeVectorize 知识库分块+向量化任务
+	StreamKnowledgeVectorize = "knowledge:vectorize:stream"
+	// GroupKnowledgeVectorize 消费者组
+	GroupKnowledgeVectorize = "knowledge-vectorize-group"
+	// StreamFieldKbID 知识库主键
+	StreamFieldKbID = "kbId"
+	// StreamFieldKbContent 全文（消费者分块；大文本由 Stream 承载）
+	StreamFieldKbContent = "content"
+)

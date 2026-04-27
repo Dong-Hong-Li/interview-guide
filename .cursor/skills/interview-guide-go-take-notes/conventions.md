@@ -31,6 +31,8 @@
 
 ## HTTP 接口
 
+**全域硬规则**：**application/service 不校验**前端/HTTP 原始入参（含 `Trim`、非空、MIME/大小、multipart 可解析性等）；**一律在 controller** 完成，再封装 `model.Validated*`。知识库上传另含正文抽取，仍在 controller 侧完成，见 `docs/开发规范.md` §3.2.1。
+
 ### 路由
 
 ```go
@@ -77,7 +79,7 @@ type SubmitAnswerReq struct {
 
 ### 控制器职责
 
-控制器只做「HTTP 入参规则」（非空、范围、上界），通过后封装为 `model.Validated*`：
+控制器完成全部「HTTP/前端入参规则」（`binding.Validate`、`Trim`、非空、范围、domain 校验、multipart 正文抽取等），通过后封装为 `model.Validated*`；**service 不再重复**同类校验：
 
 ```go
 return c.SubmitAnswerService.SubmitAnswer(ctx, model.ValidatedSubmitAnswer{

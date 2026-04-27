@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"interview-guide-go/internal/application/interview/service"
-	kbctl "interview-guide-go/internal/application/knowledgebase/controller"
 	ragctl "interview-guide-go/internal/application/ragchat/controller"
 	"interview-guide-go/internal/application/resume/repository"
 	"interview-guide-go/internal/config"
@@ -68,16 +67,22 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	// ── 面试模块：题目生成器、CreateInterview 用例、控制器由 wire 生成的 injector 装配 ──
 	interviewController := initializeInterviewController(lg, postgresService.DB, redisService.Client, oaSvc, cfg)
 
+	// ── 知识库：上传（存储/落库/向量化入队）由 wire 装配，其余端点多为 501 占位 ──
+	knowledgeBaseController := initializeKnowledgeBaseController(cfg, lg, postgresService.DB, redisService.Client, storageService)
+
 	// ── 异步：简历分析 Redis Stream 消费者
 	startResumeAnalyzeConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, mapper.NewResumeMapper(postgresService.DB))
 
 	// ── 异步：面试 LLM 评估（最后一题后 evaluate_status=PENDING + 入队；与主项目 take-notes 能力对齐）
 	startInterviewEvaluateConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, postgresService)
 
+	// ── 异步：知识库向量化（Upload 后入队 knowledge:vectorize:stream，消费者分块并回写 vector_status / chunk_count）
+	startKnowledgeVectorizeConsumerIfReady(ctx, lg, redisService, postgresService)
+
 	return []httpserver.RouteRegistrar{
 		resumeController,
 		interviewController,
-		&kbctl.KnowledgeBaseController{},
+		knowledgeBaseController,
 		&ragctl.RagChatController{},
 	}, cleanup
 }
@@ -146,5 +151,22 @@ func startInterviewEvaluateConsumerIfReady(
 	lg.Info(logmsg.MsgInterviewEvaluateConsumerEnabled,
 		zap.String(logmsg.FieldOpenAIBaseURL, o.OpenAIBaseURL),
 		zap.String(logmsg.FieldModel, o.AIModel),
+	)
+}
+
+// startKnowledgeVectorizeConsumerIfReady 当 Redis 与 Postgres 就绪时启动知识库向量化消费者（不依赖 OpenAI，与 Upload 入队成对）。
+func startKnowledgeVectorizeConsumerIfReady(
+	ctx context.Context,
+	lg *zap.Logger,
+	redisService *redis.RedisService,
+	pg *postgres.PostgresService,
+) {
+	if redisService == nil || pg == nil || pg.DB == nil {
+		return
+	}
+	redisstream.StartKnowledgeVectorizeConsumer(ctx, redisService.Client, mapper.NewKnowledgeBaseMapper(pg.DB), lg)
+	lg.Info(logmsg.MsgKnowledgeVectorizeConsumerEnabled,
+		zap.String(logmsg.FieldRedis, redisService.Client.String()),
+		zap.String(logmsg.FieldPostgres, pg.DB.Name()),
 	)
 }
