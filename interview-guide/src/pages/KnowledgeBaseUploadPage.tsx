@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { knowledgeBaseApi } from '../api/knowledgebase';
+import {
+  KNOWLEDGE_BASE_MAX_FILE_BYTES,
+  knowledgeBaseApi,
+} from '../api/knowledgebase';
 import type { UploadKnowledgeBaseResponse } from '../api/knowledgebase';
 import FileUploadCard from '../components/FileUploadCard';
 
@@ -16,6 +19,12 @@ export default function KnowledgeBaseUploadPage({ onUploadComplete, onBack }: Kn
     setUploading(true);
     setError('');
 
+    if (file.size > KNOWLEDGE_BASE_MAX_FILE_BYTES) {
+      setError('文件超过 50MB，请压缩或拆分后重试');
+      setUploading(false);
+      return;
+    }
+
     try {
       const data = await knowledgeBaseApi.uploadKnowledgeBase(file, name);
       onUploadComplete(data);
@@ -30,7 +39,7 @@ export default function KnowledgeBaseUploadPage({ onUploadComplete, onBack }: Kn
     <FileUploadCard
       title="上传知识库"
       subtitle="上传文档，AI 将基于知识库内容回答您的问题"
-      accept=".pdf,.doc,.docx,.txt,.md"
+      accept=".pdf,.docx,.txt,.md"
       formatHint="支持 PDF、DOCX、DOC、TXT、MD"
       maxSizeHint="最大 50MB"
       uploading={uploading}

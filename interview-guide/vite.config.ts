@@ -42,6 +42,8 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiProxyTarget,
           changeOrigin: true,
+          // 大文件经 dev server 转发时与 axios 超长上传超时对齐（避免仅调大服务端读超时却仍被代理卡住）
+          timeout: 600_000,
         },
       },
     },

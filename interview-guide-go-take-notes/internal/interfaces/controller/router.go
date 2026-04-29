@@ -17,11 +17,16 @@ type RouteRegistrar interface {
 }
 
 // RegistrationRoutes 构建站点根路由：全局中间件、根健康检查、/api 下各域与系统端点。
-func RegistrationRoutes(lg *zap.Logger, suppress []config.AccessLogSuppressRule, registrars []RouteRegistrar) http.Handler {
+func RegistrationRoutes(lg *zap.Logger, cfg *config.Config, registrars []RouteRegistrar) http.Handler {
 	r := chi.NewRouter()
+	r.Use(middleware.CORS(cfg))
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
+	var suppress []config.AccessLogSuppressRule
+	if cfg != nil {
+		suppress = cfg.HTTPAccessLogSuppress
+	}
 	if lg != nil {
 		r.Use(middleware.RequestLogger(lg, suppress))
 	}

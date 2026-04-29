@@ -2,21 +2,34 @@
 package logmsg
 
 const (
-	MsgServerListening           = "HTTP 服务已开始监听"
-	MsgListenFatal               = "监听端口失败"
-	MsgShutdownWarn              = "收到关闭信号，正在优雅退出"
-	MsgServerStopped             = "HTTP 服务已停止"
-	MsgLoggerInitFatal           = "logger 初始化失败"
-	MsgServerConfigNilSkipWiring = "配置为空，跳过存储/数据库/Redis 等装配"
+	MsgServerListening      = "HTTP 服务已开始监听"
+	MsgListenFatal          = "监听端口失败"
+	MsgShutdownWarn         = "收到关闭信号，正在优雅退出"
+	MsgServerStopped        = "HTTP 服务已停止"
+	MsgLoggerInitFatal      = "logger 初始化失败"
+	MsgServerConfigNilFatal = "配置为空，进程无法启动"
 
 	MsgStorageStartFailed  = "对象存储服务启动失败"
 	MsgPostgresStartFailed = "PostgreSQL 服务启动失败"
 	MsgRedisStartFailed    = "Redis 服务启动失败"
 	MsgOpenAIStartFailed   = "OpenAI 客户端启动失败"
 
+	// MsgKnowledgeEmbeddingClientFatal KB_EMBEDDING_OPENAI_API_KEY 未配置或 EmbeddingHTTPClient 构造失败时进程退出。
+	MsgKnowledgeEmbeddingClientFatal = "知识库 Embedding 客户端初始化失败"
+
 	MsgResumeAIConsumerEnabled  = "简历 AI 分析后台消费者已启用"
 	MsgResumeAIConsumerDisabled = "简历 AI 分析后台消费者启用失败"
 	MsgResumeGradeTextTruncated = "简历 AI：简历正文超过上限，已按字符数截断后送模型"
+	// MsgKnowledgeChunkInputTruncated 知识库 AI 分片前正文超过 KB_CHUNK_MAX_INPUT_RUNES（或沿用简历上限）。
+	MsgKnowledgeChunkInputTruncated = "知识库 AI 分片：输入正文超过上限，已按 rune 截断后送模型"
+	// MsgKnowledgeChunkAIBegin 与简历 MsgResumeAnalyzeAIBeginGrade 对应：即将 POST chat/completions。
+	MsgKnowledgeChunkAIBegin = "知识库 AI 分片：开始调用模型"
+	// MsgKnowledgeChunkAIInvokeOK HTTP 成功且 JSON 解析成功后的汇总（chunk 数、token、finish_reason 等）。
+	MsgKnowledgeChunkAIInvokeOK = "知识库 AI 分片：模型调用完成"
+	// MsgKnowledgeChunkAIInvokeFailed 网络/网关错误或 choices 为空。
+	MsgKnowledgeChunkAIInvokeFailed = "知识库 AI 分片：模型调用失败"
+	// MsgKnowledgeChunkAIParseFailed 返回体非预期 JSON 或解析失败时；可带 rawPreview。
+	MsgKnowledgeChunkAIParseFailed = "知识库 AI 分片：模型返回 JSON 解析失败"
 
 	MsgInterviewEvaluateConsumerEnabled = "面试评估后台消费者已启用"
 
@@ -31,6 +44,48 @@ const (
 	MsgKnowledgeVectorizePersist         = "知识库向量化：回写 COMPLETED 失败"
 	MsgKnowledgeVectorizeDone            = "知识库向量化：本条任务处理成功"
 	MsgKnowledgeVectorizeConsumerEnabled = "知识库向量化后台消费者已启用"
+	// MsgKnowledgeVectorizeTaskBegin 分块就绪、即将调用 Embed；与 debug 级「链路」配合，info 上只看本条即可识别当前 kbId。
+	MsgKnowledgeVectorizeTaskBegin  = "知识库向量化：开始处理当前知识库"
+	MsgKnowledgeVectorizeTaskFailed = "知识库向量化：任务失败"
+	// MsgKnowledgeVectorizeEnqueued XADD 成功后（含 Redis 返回的 stream 消息 ID）。
+	MsgKnowledgeVectorizeEnqueued = "知识库向量化：已写入 Redis Stream"
+	// MsgKnowledgeVectorizePulled XREADGROUP 收到一条待处理消息（尚未查库/分块）。
+	MsgKnowledgeVectorizePulled = "知识库向量化：已从队列领取消息"
+	// MsgKnowledgeVectorizeIdleHint 长时间 Block 超时无新消息：通常表示队列为空，或消息卡在 Pending 未 ACK。
+	MsgKnowledgeVectorizeIdleHint = "知识库向量化：轮询中暂无新消息"
+	// MsgKnowledgeVectorizePELBacklogHint 启动时 pending>0：多半是上次进程 PID 不同或未 ACK；靠 XAUTOCLAIM(minIdle) 回收或等待超时。
+	MsgKnowledgeVectorizePELBacklogHint = "知识库向量化：PEL 有待 ACK 的消息（旧 consumer / 中断）；未读到新任务时请等待回收或排查卡死"
+	// MsgKnowledgeVectorizePendingAbortedOnStart 设置 KB_VECTORIZE_ABORT_PENDING_ON_START 后，启动时作废 PEL 并置 DB 为 FAILED。
+	MsgKnowledgeVectorizePendingAbortedOnStart = "知识库向量化：已按启动策略作废 PEL 积压（FAILED + XACK）"
+	// MsgKnowledgeVectorizeTrace 单条队列任务的分步说明（step / next / outcome，便于排查「卡在哪一步」）。
+	MsgKnowledgeVectorizeTrace = "知识库向量化：链路"
+
+	// MsgKnowledgeBaseUploadBegin 新文件已进入存储/落库/入队分支（非 dedup）。
+	MsgKnowledgeBaseUploadBegin = "知识库上传：开始处理新文件"
+	// MsgKnowledgeBaseUploadDuplicate 与 file_hash 已存在记录重复，未再入队向量化。
+	MsgKnowledgeBaseUploadDuplicate = "知识库上传：重复文件，已忽略并仅更新访问次数"
+	// MsgKnowledgeBaseUploadOK 落库成功且向量化任务已写入 Redis Stream。
+	MsgKnowledgeBaseUploadOK = "知识库上传：成功，已入队向量化"
+	// MsgKnowledgeBaseUploadFailed 上传链路任一步失败即将返回错误。
+	MsgKnowledgeBaseUploadFailed = "知识库上传：失败"
+	// MsgKnowledgeBaseRevectorizeOK 已重置状态并成功写入 Redis Stream；parsedTextRunes 便于核对抽取长度。
+	MsgKnowledgeBaseRevectorizeOK = "知识库重向量化：已入队"
+	// MsgKnowledgeBaseRevectorizeFailed 抽取为空、置 PENDING、或 XADD 失败（reason：extract_empty | update_pending | enqueue）。
+	MsgKnowledgeBaseRevectorizeFailed = "知识库重向量化：失败"
+
+	// MsgKnowledgeVectorizeEmbedOK 网关 Embeddings 已全部成功，尚未写 PG（接着 SaveChunks）。
+	MsgKnowledgeVectorizeEmbedOK = "知识库向量化：Embedding 网关调用成功"
+	// MsgKnowledgeVectorizeChunkAIOutcome AI 分片调用成功并已解析 JSON：须带 chunkCount、exceptionCount、chunkAIDuration。
+	MsgKnowledgeVectorizeChunkAIOutcome = "知识库向量化：AI 分片结果汇总"
+	// MsgKnowledgeVectorizeChunkAIExceptionItem 与 MsgKnowledgeVectorizeChunkAIOutcome 配套，每条异常一行，便于检索 reason/raw_excerpt。
+	MsgKnowledgeVectorizeChunkAIExceptionItem = "知识库向量化：AI 分片异常项"
+
+	// MsgKnowledgeEmbedBatchRun 单次 Embed 调用开始（多批 HTTP 共用一个 runId）。
+	MsgKnowledgeEmbedBatchRun = "知识库 Embedding：本次向量请求开始"
+	// 「知识库 Embedding」每批 HTTP：发送 → 网关返回（或失败），均经 zap 打到控制台。
+	MsgKnowledgeEmbedBatchOutgoing   = "知识库 Embedding：发送批量请求"
+	MsgKnowledgeEmbedBatchReturned   = "知识库 Embedding：网关批量响应成功"
+	MsgKnowledgeEmbedBatchHTTPFailed = "知识库 Embedding：网关批量响应失败"
 
 	MsgInterviewQuestionLLMOK       = "面试出题：LLM 生成题目成功"
 	MsgInterviewQuestionLLMDegraded = "面试出题：LLM 调用失败已使用默认题"
@@ -91,11 +146,41 @@ const (
 	FieldOverallScore     = "整体评分"
 	FieldRuneCount        = "简历字符数"
 	FieldMaxRunes         = "最大字符数"
-	FieldAIDuration       = "AI 评分耗时"
+	// FieldKnowledgeChunkInputRunes 知识库向量化：送 AI 分片的全文 Unicode 字符数（与 Stream body / pg_meta 后正文一致，非简历）。
+	FieldKnowledgeChunkInputRunes = "kbChunkInputRunes"
+	FieldAIDuration               = "AI 评分耗时"
 	// FieldLLMDuration 与主项目 internal/shared/logmsg 的 aiDuration 对齐，供面试题 LLM 等通用模型耗时。
 	FieldLLMDuration = "aiDuration"
 	// FieldSessionID 对外 session_id；面试评估/会话日志共用。
 	FieldSessionID = "sessionId"
 	// FieldStatus 通用会话/任务状态值。
 	FieldStatus = "status"
+	// FieldReason 失败归类：chunk_ai_failed | chunk_empty_after_ai | embedding | embedding_count_mismatch | persist | extract_empty | storage | presign | insert | enqueue 等。
+	FieldReason = "reason"
+	// FieldVectorizeDuration 单条队列任务从开始处理（分块就绪后）到结束的总耗时。
+	FieldVectorizeDuration = "vectorizeDuration"
+	// FieldEmbeddingDuration Embed 单次调用耗时（仅向量化链路）。
+	FieldEmbeddingDuration = "embeddingDuration"
+	// FieldEmbeddingBatchIndex 本轮 Embed 拆分后的批次序号（1-based）。
+	FieldEmbeddingBatchIndex = "embeddingBatchIndex"
+	// FieldEmbeddingBatchTotal Embed 拆分后的批次总数。
+	FieldEmbeddingBatchTotal = "embeddingBatchTotal"
+	// FieldEmbeddingSliceStart 当前批次在全文块数组中的起始下标（含）。
+	FieldEmbeddingSliceStart = "embeddingSliceStart"
+	// FieldEmbeddingSliceEnd 当前批次在全文块数组中的结束下标（含）。
+	FieldEmbeddingSliceEnd = "embeddingSliceEnd"
+	// FieldEmbeddingBatchRoundTripDuration 单批 POST /embeddings 往返耗时（不含其它批次）。
+	FieldEmbeddingBatchRoundTripDuration = "embeddingBatchRoundTrip"
+	// FieldEmbeddingDimensionsRequest 请求体传给网关的 dimensions（与 KB_EMBEDDING_DIMENSIONS 一致；v3/v4/3 系列支持）。
+	FieldEmbeddingDimensionsRequest = "embeddingDimensions"
+	// FieldVectorizeStep 链路阶段：msg_parsed | pg_meta_ok | chunks_split | embed_invoke | embed_ok | pg_save_start | pg_save_ok | redis_xack 等。
+	FieldVectorizeStep = "step"
+	// FieldVectorizeNext 本步结束后将执行的下一步（人类可读）。
+	FieldVectorizeNext = "next"
+	// FieldOutcome 本步结果：success | fail（与 HTTP 级 returned 区分）。
+	FieldOutcome = "outcome"
+	// FieldEmbeddingResponseVectorDim 网关本批返回的每条向量维数（抽样与首条一致时只打一次）。
+	FieldEmbeddingResponseVectorDim = "responseVectorDim"
+	// FieldEmbeddingResponseCount 网关本批返回的 embedding 条数（应等于 inputCount）。
+	FieldEmbeddingResponseCount = "responseEmbeddingCount"
 )

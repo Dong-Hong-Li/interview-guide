@@ -32,9 +32,6 @@ func NewOpenAIService(_ context.Context, c *config.Config) (*OpenAIService, erro
 	}
 	apiKey := strings.TrimSpace(c.Openai.OpenAIAPIKey)
 	if apiKey == "" {
-		apiKey = strings.TrimSpace(c.Openai.MoonshotAPIKey)
-	}
-	if apiKey == "" {
 		return nil, errors.New(errmsg.ConfigOpenAIServiceStartFailed)
 	}
 
@@ -44,4 +41,24 @@ func NewOpenAIService(_ context.Context, c *config.Config) (*OpenAIService, erro
 		option.WithBaseURL(baseURL),
 	)
 	return &OpenAIService{client: oaClient}, nil
+}
+
+// EmbeddingHTTPClient 返回知识库向量专用 HTTP 客户端（与聊天 Moonshot/OpenAI 分离）。
+// GatewayAPIKey / GatewayBaseURL 须在配置阶段校验为非空（禁止静默默认网关 URL）。
+func EmbeddingHTTPClient(cfg *config.Config, _ *OpenAIService) (openaisdk.Client, error) {
+	if cfg == nil {
+		return openaisdk.Client{}, errors.New(errmsg.ConfigOpenAIServiceStartFailed)
+	}
+	key := strings.TrimSpace(cfg.Openai.KnowledgeEmbedding.GatewayAPIKey)
+	if key == "" {
+		return openaisdk.Client{}, errors.New(errmsg.ConfigKnowledgeEmbeddingGatewayAPIKeyRequired)
+	}
+	base := strings.TrimSpace(cfg.Openai.KnowledgeEmbedding.GatewayBaseURL)
+	if base == "" {
+		return openaisdk.Client{}, errors.New(errmsg.ConfigKnowledgeEmbeddingGatewayBaseURLRequired)
+	}
+	return openaisdk.NewClient(
+		option.WithAPIKey(key),
+		option.WithBaseURL(base),
+	), nil
 }

@@ -267,12 +267,12 @@ defer func() {
 
 - 控制器用 `wire.Struct(new(controller.X), "*")`；其内部字段必须**全部**为已 provided 的接口/类型
 - 接口同名实现冲突 → `wire.Bind(new(IFace), new(*Impl))`，**不**在 set 内重复 `provideX` 函数
-- nil 兜底（如 OpenAI 不可用退回 Stub）写专门 `provideXxx`：
+- `provideXxx` 内**禁止**对关键依赖 nil 静默退回 Stub；不满足前置条件应 **panic** 或阻止进程启动：
 
 ```go
 func provideInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Config, lg *zap.Logger) ivrepo.InterviewQuestionGenerator {
     if oa == nil {
-        return ai.NewStubInterviewQuestionGenerator()
+        panic("OpenAIService required for InterviewQuestionGenerator")
     }
     return aiq.NewOpenAIInterviewQuestionGenerator(oa, cfg, lg)
 }
@@ -354,7 +354,7 @@ lg.Info(logmsg.MsgInterviewEvaluateAIBegin,
 - domain：纯函数 100% 覆盖（gates / status helpers）
 - 命名 `Test<Func>_<场景>`；断言用原生 `t.Errorf`，不强制引入 `testify`
 - 集成测试 build tag：`//go:build integration`
-- LLM 在 CI **不真打**，使用 stub（`NewStubInterviewQuestionGenerator`）
+- LLM 在 CI **不真打**：单元/集成测试中对端口注入 **fake/mock**；运行时 wire 装配路径不使用 Stub 顶替缺依赖
 
 ## 安全
 

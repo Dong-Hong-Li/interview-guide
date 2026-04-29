@@ -16,7 +16,8 @@ RUN apk add --no-cache ca-certificates tzdata poppler-utils \
 	&& echo "https://dl-cdn.alpinelinux.org/alpine/v3.21/community" >> /etc/apk/repositories \
 	&& apk add --no-cache font-noto-cjk \
 	&& adduser -D -H -u 10001 appuser
-USER appuser
+WORKDIR /app
 COPY --from=build /bin/server /bin/server
+USER appuser
 EXPOSE 8080
 ENTRYPOINT ["/bin/server"]

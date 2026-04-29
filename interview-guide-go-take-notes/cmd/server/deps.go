@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"interview-guide-go/internal/application/interview/service"
-	ragctl "interview-guide-go/internal/application/ragchat/controller"
 	"interview-guide-go/internal/application/resume/repository"
 	"interview-guide-go/internal/config"
 	"interview-guide-go/internal/infrastructure/ai"
@@ -31,7 +30,7 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 		}
 	}
 	if cfg == nil {
-		lg.Warn(logmsg.MsgServerConfigNilSkipWiring)
+		lg.Fatal(logmsg.MsgServerConfigNilFatal)
 	}
 
 	// ── 基础设施：对象存储 / Postgres / Redis / OpenAI 客户端 ──
@@ -76,14 +75,14 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	// ── 异步：面试 LLM 评估（最后一题后 evaluate_status=PENDING + 入队；与主项目 take-notes 能力对齐）
 	startInterviewEvaluateConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, postgresService)
 
-	// ── 异步：知识库向量化（Upload 后入队 knowledge:vectorize:stream，消费者分块并回写 vector_status / chunk_count）
-	startKnowledgeVectorizeConsumerIfReady(ctx, lg, redisService, postgresService)
+	// ── 异步：知识库向量化（Upload 后入队 knowledge:vectorize:stream；消费者分块→Embedding→knowledge_base_chunks）
+	startKnowledgeVectorizeConsumerIfReady(ctx, cfg, lg, redisService, postgresService, oaSvc)
 
 	return []httpserver.RouteRegistrar{
 		resumeController,
 		interviewController,
 		knowledgeBaseController,
-		&ragctl.RagChatController{},
+		initializeRagChatController(postgresService.DB),
 	}, cleanup
 }
 
@@ -97,12 +96,11 @@ func startResumeAnalyzeConsumerIfReady(
 	resumeWriter repository.ResumeWriter,
 ) {
 	if cfg == nil || redisService == nil || oaSvc == nil || resumeWriter == nil {
-		lg.Info(logmsg.MsgResumeAIConsumerDisabled,
+		lg.Fatal("resume analyze consumer: prerequisites missing",
 			zap.Bool(logmsg.FieldRedis, redisService != nil),
 			zap.Bool(logmsg.FieldPostgres, resumeWriter != nil),
 			zap.Bool(logmsg.FieldAPIKey, oaSvc != nil),
 		)
-		return
 	}
 	o := cfg.Openai
 	// 简历分析器
@@ -112,10 +110,6 @@ func startResumeAnalyzeConsumerIfReady(
 	)
 	// 启动简历分析消费者
 	redisstream.StartResumeAnalyzeConsumer(ctx, redisService.Client, resumeWriter, grader, lg)
-	lg.Info(logmsg.MsgResumeAIConsumerEnabled,
-		zap.String(logmsg.FieldOpenAIBaseURL, o.OpenAIBaseURL),
-		zap.String(logmsg.FieldModel, o.AIModel),
-	)
 }
 
 // startInterviewEvaluateConsumerIfReady 当 Redis / Postgres / OpenAI 就绪时启动「面试整卷 LLM 评估」消费者；否则仅记录并跳过（与主项目 deps 条件一致）。
@@ -128,7 +122,11 @@ func startInterviewEvaluateConsumerIfReady(
 	pg *postgres.PostgresService,
 ) {
 	if cfg == nil || redisService == nil || oaSvc == nil || pg == nil || pg.DB == nil {
-		return
+		lg.Fatal("interview evaluate consumer: prerequisites missing",
+			zap.Bool(logmsg.FieldRedis, redisService != nil),
+			zap.Bool("postgres_db", pg != nil && pg.DB != nil),
+			zap.Bool(logmsg.FieldAPIKey, oaSvc != nil),
+		)
 	}
 	o := cfg.Openai
 	// 面试会话 mapper
@@ -142,31 +140,34 @@ func startInterviewEvaluateConsumerIfReady(
 	// 面试评估器
 	ivEval, err := ai.NewInterviewEvaluator(oaSvc.Client(), o.AIModel, o.ResumeAIMaxRunes, o.ResumeAIMaxCompletionTokens, o.ResumeAITemperature, 8, lg)
 	if err != nil {
-		lg.Warn(logmsg.MsgInterviewEvaluatePromptsLoad, zap.Error(err))
-		return
+		lg.Fatal(logmsg.MsgInterviewEvaluatePromptsLoad, zap.Error(err))
 	}
 	// 启动面试评估消费者
 	redisstream.StartInterviewEvaluateConsumer(ctx, redisService.Client, proc, ivEval, lg)
 
-	lg.Info(logmsg.MsgInterviewEvaluateConsumerEnabled,
-		zap.String(logmsg.FieldOpenAIBaseURL, o.OpenAIBaseURL),
-		zap.String(logmsg.FieldModel, o.AIModel),
-	)
 }
 
-// startKnowledgeVectorizeConsumerIfReady 当 Redis 与 Postgres 就绪时启动知识库向量化消费者（不依赖 OpenAI，与 Upload 入队成对）。
+// startKnowledgeVectorizeConsumerIfReady 当 Redis、Postgres、OpenAI 就绪时启动知识库向量化消费者（Embedding 写入 PG）。
 func startKnowledgeVectorizeConsumerIfReady(
 	ctx context.Context,
+	cfg *config.Config,
 	lg *zap.Logger,
 	redisService *redis.RedisService,
 	pg *postgres.PostgresService,
+	oaSvc *ai.OpenAIService,
 ) {
-	if redisService == nil || pg == nil || pg.DB == nil {
-		return
+	if cfg == nil || redisService == nil || pg == nil || pg.DB == nil || oaSvc == nil {
+		lg.Fatal("knowledge vectorize consumer: prerequisites missing",
+			zap.Bool(logmsg.FieldRedis, redisService != nil),
+			zap.Bool("postgres_db", pg != nil && pg.DB != nil),
+			zap.Bool(logmsg.FieldAPIKey, oaSvc != nil),
+		)
 	}
-	redisstream.StartKnowledgeVectorizeConsumer(ctx, redisService.Client, mapper.NewKnowledgeBaseMapper(pg.DB), lg)
-	lg.Info(logmsg.MsgKnowledgeVectorizeConsumerEnabled,
-		zap.String(logmsg.FieldRedis, redisService.Client.String()),
-		zap.String(logmsg.FieldPostgres, pg.DB.Name()),
-	)
+	embedHTTP, err := ai.EmbeddingHTTPClient(cfg, oaSvc)
+	if err != nil {
+		lg.Fatal(logmsg.MsgKnowledgeEmbeddingClientFatal, zap.Error(err))
+	}
+	embedder := ai.NewOpenAIKnowledgeEmbedder(embedHTTP, cfg.Openai, lg)
+	chunker := ai.NewOpenAIKnowledgeTextChunker(oaSvc.Client(), cfg, lg)
+	redisstream.StartKnowledgeVectorizeConsumer(ctx, redisService.Client, mapper.NewKnowledgeBaseMapper(pg.DB), chunker, embedder, lg)
 }

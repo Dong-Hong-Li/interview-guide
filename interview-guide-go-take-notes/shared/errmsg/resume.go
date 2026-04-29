@@ -2,18 +2,18 @@ package errmsg
 
 // 简历应用层与 HTTP 适配层复用的业务文案（与 response.Err 或 ErrJSON 搭配）。
 const (
-	ResumeUploadServiceNil           = "resume upload service is nil"
-	ResumePersistenceNotConfigured   = "resume persistence not configured"
-	ResumeUnsupportedContentType     = "unsupported content type"
-	ResumeFileExceedsSizeLimit       = "resume file exceeds size limit"
-	ResumeExtractTextEmpty           = "extract resume text failed: empty text"
-	DuplicateResumeSameFileHash      = "duplicate resume (same file hash)"
-	SaveResumeInvalidID              = "save resume returned invalid id"
-	ResumeDetailServiceNotConfigured = "resume detail service not configured"
+	ResumeUploadServiceNil           = "简历上传服务未配置"
+	ResumePersistenceNotConfigured   = "简历持久化未配置"
+	ResumeUnsupportedContentType     = "不支持的文件类型"
+	ResumeFileExceedsSizeLimit       = "简历文件超过大小限制"
+	ResumeExtractTextEmpty           = "简历正文抽取失败：正文为空"
+	DuplicateResumeSameFileHash      = "重复简历（相同文件哈希）"
+	SaveResumeInvalidID              = "保存简历返回了无效的 ID"
+	ResumeDetailServiceNotConfigured = "简历详情服务未配置"
 	ResumeNotFound                   = "简历不存在"
 	ResumeDeleteSuccess              = "简历删除成功"
 	ResumeReanalyzeSuccess           = "简历重新分析成功"
-	ExportServiceNotConfigured       = "export service not configured"
+	ExportServiceNotConfigured       = "导出服务未配置"
 	InvalidResumeID                  = "无效的简历 ID"
 
 	// PDFExportFontHint 中文字体缺失时的用户提示
@@ -22,15 +22,15 @@ const (
 
 // 与 err.Error() 拼接的固定前缀（末尾含 ": "）。
 const (
-	ValidateUploadResumeRequestFailed = "validate upload resume request failed: "
-	FindExistingResumeFailed          = "find existing resume failed: "
-	UploadFileFailed                  = "upload file failed: "
-	GetFileURLFailed                  = "get file url failed: "
-	SaveResumeFailed                  = "save resume failed: "
-	SendAnalyzeTaskFailed             = "send analyze task failed: "
-	FailedListResumes                 = "failed to list resumes: "
-	FailedGetResumeStatistics         = "failed to get resume statistics: "
-	FailedDeleteResume                = "failed to delete resume: "
-	FailedReanalyzeResume             = "failed to reanalyze resume: "
+	ValidateUploadResumeRequestFailed = "校验上传简历请求失败："
+	FindExistingResumeFailed          = "查询已有简历失败："
+	UploadFileFailed                  = "上传文件失败："
+	GetFileURLFailed                  = "获取文件地址失败："
+	SaveResumeFailed                  = "保存简历失败："
+	SendAnalyzeTaskFailed             = "发送分析任务失败："
+	FailedListResumes                 = "获取简历列表失败："
+	FailedGetResumeStatistics         = "获取简历统计失败："
+	FailedDeleteResume                = "删除简历失败："
+	FailedReanalyzeResume             = "重新分析简历失败："
 	PDFGenerateFailedPrefix           = "无法生成 PDF："
 )

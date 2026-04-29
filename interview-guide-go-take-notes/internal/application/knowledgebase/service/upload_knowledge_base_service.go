@@ -13,12 +13,16 @@ import (
 	"interview-guide-go/internal/application/knowledgebase/model/results"
 	kbrepo "interview-guide-go/internal/application/knowledgebase/repository"
 	"interview-guide-go/shared/errmsg"
+	"interview-guide-go/shared/logmsg"
 	"interview-guide-go/shared/response"
+
+	"go.uber.org/zap"
 )
 
 // UploadKnowledgeBaseService 与 Java KnowledgeBaseUploadService 对齐的去重、存储、落库、入队向量化。
 // 只接收 controller 已校验并封装的 ValidatedKnowledgeBaseUpload；**不校验** HTTP 原始入参；正文抽取在 Upload 内完成。
 type UploadKnowledgeBaseService struct {
+	lg        *zap.Logger
 	storage   kbrepo.ObjectStoragePort
 	writer    kbrepo.KnowledgeBaseWriter
 	vectorPub kbrepo.VectorizeTaskPublisher
@@ -27,12 +31,14 @@ type UploadKnowledgeBaseService struct {
 
 // NewUploadKnowledgeBaseService Wire 注入。
 func NewUploadKnowledgeBaseService(
+	logger *zap.Logger,
 	store kbrepo.ObjectStoragePort,
 	writer kbrepo.KnowledgeBaseWriter,
 	vectorPub kbrepo.VectorizeTaskPublisher,
 	text kbrepo.KnowledgeTextExtractor,
 ) *UploadKnowledgeBaseService {
 	return &UploadKnowledgeBaseService{
+		lg:        logger,
 		storage:   store,
 		writer:    writer,
 		vectorPub: vectorPub,
@@ -62,6 +68,12 @@ func (s *UploadKnowledgeBaseService) Upload(ctx context.Context, in *model.Valid
 	// 5. 解析：KnowledgeBaseParseService 等价物——从文件中抽取纯文本；若空则 5xx/业务错误「无法从文件中提取文本内容」；解析结果用于入队，不落库大文本（Java 不存 content 全文）。
 	parsedText := strings.TrimSpace(s.text.ExtractKnowledgeBaseText(content, filename, contentType))
 	if parsedText == "" {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "extract_empty"),
+				zap.String("filename", filename),
+			)
+		}
 		return nil, response.Err(http.StatusBadRequest, errmsg.KnowledgeBaseExtractTextEmpty)
 	}
 
@@ -69,12 +81,26 @@ func (s *UploadKnowledgeBaseService) Upload(ctx context.Context, in *model.Valid
 	// 失败则中止并清理。
 	existing, err := s.writer.FindByFileHash(ctx, fileHash)
 	if err != nil {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "hash_lookup"),
+				zap.Error(err),
+				zap.String("filename", filename),
+			)
+		}
 		return nil, response.Err(http.StatusInternalServerError, errmsg.FindKnowledgeBaseByHashFailed+err.Error())
 	}
 
 	// 重复上传时直接返回，不再重复上传与落库。
 	if existing != nil {
 		_ = s.writer.IncrementAccessCount(ctx, existing.ID)
+		if s.lg != nil {
+			s.lg.Info(logmsg.MsgKnowledgeBaseUploadDuplicate,
+				zap.Int64("kbId", existing.ID),
+				zap.String("filename", filename),
+				zap.String(logmsg.FieldStatus, existing.VectorStatus),
+			)
+		}
 		return &results.UploadKnowledgeBaseResponse{
 			KnowledgeBase: results.UploadKBInfo{
 				ID:            existing.ID,
@@ -91,20 +117,49 @@ func (s *UploadKnowledgeBaseService) Upload(ctx context.Context, in *model.Valid
 			Duplicate: true,
 		}, nil
 	}
+	if s.vectorPub == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseVectorPublisherNotConfigured)
+	}
 	// 获取存储 key
 	storageKey := buildKnowledgeBaseObjectKey(fileHash, filename)
 	if s.storage == nil {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed, zap.String(logmsg.FieldReason, "storage_nil"))
+		}
 		return nil, response.Err(http.StatusServiceUnavailable, "object storage not configured")
+	}
+
+	if s.lg != nil {
+		s.lg.Info(logmsg.MsgKnowledgeBaseUploadBegin,
+			zap.String("filename", filename),
+			zap.String("name", name),
+			zap.String("category", category),
+			zap.Int("parsedTextRunes", len([]rune(parsedText))),
+		)
 	}
 
 	// 上传：与简历上传同栈（S3/MinIO 等）写入 knowledge 前缀 key，取 fileUrl；失败则中止并清理。
 	if err := s.storage.Upload(ctx, storageKey, bytes.NewReader(content), contentType); err != nil {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "storage"),
+				zap.Error(err),
+				zap.String("filename", filename),
+			)
+		}
 		return nil, response.Err(http.StatusInternalServerError, errmsg.UploadKnowledgeBaseFileFailed+err.Error())
 	}
 
 	// 预签名：取 presigned url。
 	fileURL, err := s.storage.GetObjectPresignedURL(ctx, storageKey)
 	if err != nil {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "presign"),
+				zap.Error(err),
+				zap.String("filename", filename),
+			)
+		}
 		return nil, response.Err(http.StatusInternalServerError, errmsg.GetKnowledgeBaseURLFailed+err.Error())
 	}
 
@@ -122,19 +177,44 @@ func (s *UploadKnowledgeBaseService) Upload(ctx context.Context, in *model.Valid
 	// 事务落库
 	id, err := s.writer.InsertKnowledgeBase(ctx, insert)
 	if err != nil {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "insert"),
+				zap.Error(err),
+				zap.String("filename", filename),
+			)
+		}
 		return nil, response.Err(http.StatusInternalServerError, errmsg.SaveKnowledgeBaseFailed+err.Error())
 	}
-	// 11.  主键小于 1 时 Java 会抛异常。
+	// 11.  主键小于 1 时 返回错误
 	if id < 1 {
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "invalid_id"),
+				zap.Int64("kbId", id),
+			)
+		}
 		return nil, response.Err(http.StatusInternalServerError, errmsg.SaveKnowledgeBaseFailed+"invalid id")
 	}
 
-	// 12. 异步向量化：向 Redis Stream 发送任务/ 由 Vectorize 消费者分块+embedding+写向量库+更新 vector_status/vector_error/chunk_count。Producer 入队失败时 Java 会 updateVectorStatus 为 FAILED，Go 应同样处理。
-	if s.vectorPub != nil {
-		if err := s.vectorPub.SendVectorizeTask(ctx, id, parsedText); err != nil {
-			_ = s.writer.UpdateVectorStatus(ctx, id, "FAILED", err.Error())
-			return nil, response.Err(http.StatusInternalServerError, errmsg.SendVectorizeTaskFailed+err.Error())
+	// 12. 异步向量化：向 Redis Stream 发送任务（Producer 失败则 FAILED）。
+	if err := s.vectorPub.SendVectorizeTask(ctx, id, parsedText); err != nil {
+		_ = s.writer.UpdateVectorStatus(ctx, id, "FAILED", err.Error())
+		if s.lg != nil {
+			s.lg.Warn(logmsg.MsgKnowledgeBaseUploadFailed,
+				zap.String(logmsg.FieldReason, "enqueue"),
+				zap.Int64("kbId", id),
+				zap.Error(err),
+			)
 		}
+		return nil, response.Err(http.StatusInternalServerError, errmsg.SendVectorizeTaskFailed+err.Error())
+	}
+	if s.lg != nil {
+		s.lg.Info(logmsg.MsgKnowledgeBaseUploadOK,
+			zap.Int64("kbId", id),
+			zap.Int("parsedTextRunes", len([]rune(parsedText))),
+			zap.String("filename", filename),
+		)
 	}
 	return &results.UploadKnowledgeBaseResponse{
 		KnowledgeBase: results.UploadKBInfo{

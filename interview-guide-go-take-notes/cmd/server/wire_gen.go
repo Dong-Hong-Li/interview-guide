@@ -17,6 +17,9 @@ import (
 	controller3 "interview-guide-go/internal/application/knowledgebase/controller"
 	repository3 "interview-guide-go/internal/application/knowledgebase/repository"
 	service3 "interview-guide-go/internal/application/knowledgebase/service"
+	controller4 "interview-guide-go/internal/application/ragchat/controller"
+	repository4 "interview-guide-go/internal/application/ragchat/repository"
+	service4 "interview-guide-go/internal/application/ragchat/service"
 	"interview-guide-go/internal/application/resume/controller"
 	"interview-guide-go/internal/application/resume/repository"
 	"interview-guide-go/internal/application/resume/service"
@@ -95,15 +98,35 @@ func initializeInterviewController(lg *zap.Logger, db *gorm.DB, rdb *redis.Clien
 
 // initializeKnowledgeBaseController 知识库域（/api/knowledgebase/*），与 initializeResumeController 同形参以复用 StartDeps 注入。
 func initializeKnowledgeBaseController(cfg *config.Config, lg *zap.Logger, db *gorm.DB, rdb *redis.Client, storeSvc *storage.StorageService) *controller3.KnowledgeBaseController {
-	v := adapter.NewObjectStorageAdapter(storeSvc)
+	objectStoragePort := adapter.NewObjectStorageAdapter(storeSvc)
 	knowledgeBaseMapper := mapper.NewKnowledgeBaseMapper(db)
-	vectorizeTaskPublisher := adapter3.NewKnowledgeVectorizePublisher(rdb)
+	vectorizeTaskPublisher := adapter3.NewKnowledgeVectorizePublisher(rdb, lg)
 	knowledgeTextExtractor := adapter2.NewKnowledgeTextExtractor()
-	uploadKnowledgeBaseService := service3.NewUploadKnowledgeBaseService(v, knowledgeBaseMapper, vectorizeTaskPublisher, knowledgeTextExtractor)
+	uploadKnowledgeBaseService := service3.NewUploadKnowledgeBaseService(lg, objectStoragePort, knowledgeBaseMapper, vectorizeTaskPublisher, knowledgeTextExtractor)
+	knowledgeBaseListService := service3.NewKnowledgeBaseListService(knowledgeBaseMapper)
+	deleteKnowledgeBaseService := service3.NewDeleteKnowledgeBaseService(knowledgeBaseMapper, knowledgeBaseMapper, objectStoragePort)
+	downloadKnowledgeBaseService := service3.NewDownloadKnowledgeBaseService(knowledgeBaseMapper, objectStoragePort)
+	updateKnowledgeBaseCategoryService := service3.NewUpdateKnowledgeBaseCategoryService(knowledgeBaseMapper, knowledgeBaseMapper)
+	revectorizeKnowledgeBaseService := service3.NewRevectorizeKnowledgeBaseService(lg, knowledgeBaseMapper, objectStoragePort, knowledgeBaseMapper, vectorizeTaskPublisher, knowledgeTextExtractor)
 	knowledgeBaseController := &controller3.KnowledgeBaseController{
-		UploadService: uploadKnowledgeBaseService,
+		UploadService:         uploadKnowledgeBaseService,
+		ListService:           knowledgeBaseListService,
+		DeleteService:         deleteKnowledgeBaseService,
+		DownloadService:       downloadKnowledgeBaseService,
+		UpdateCategoryService: updateKnowledgeBaseCategoryService,
+		RevectorizeService:    revectorizeKnowledgeBaseService,
 	}
 	return knowledgeBaseController
+}
+
+// initializeRagChatController RAG 对话域（/api/rag-chat/*），仅依赖 Postgres。
+func initializeRagChatController(db *gorm.DB) *controller4.RagChatController {
+	ragChatMapper := mapper.NewRagChatMapper(db)
+	ragChatSessionService := service4.NewRagChatSessionService(ragChatMapper)
+	ragChatController := &controller4.RagChatController{
+		SessionService: ragChatSessionService,
+	}
+	return ragChatController
 }
 
 // wire.go:
@@ -118,8 +141,11 @@ var interviewModuleSet = wire.NewSet(mapper.NewResumeMapper, wire.Bind(new(repos
 	provideInterviewQuestionGenerator, service2.NewCreateInterviewService, service2.NewUnfinishedSessionService, service2.NewCurrentQuestionService, service2.NewSubmitAnswerService, service2.NewListInterviewSessionsService, service2.NewReportService, service2.NewGetInterviewDetailService, service2.NewGetSessionService, service2.NewCompleteSessionService, service2.NewDeleteInterviewService, wire.Struct(new(controller2.InterviewController), "*"),
 )
 
-// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）与其它端点仍多为占位。
-var knowledgeModuleSet = wire.NewSet(mapper.NewKnowledgeBaseMapper, wire.Bind(new(repository3.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)), adapter.NewObjectStorageAdapter, adapter2.NewKnowledgeTextExtractor, adapter3.NewKnowledgeVectorizePublisher, service3.NewUploadKnowledgeBaseService, wire.Struct(new(controller3.KnowledgeBaseController), "*"))
+// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）、下载、重向量化等；query/query/stream 仍占位。
+var knowledgeModuleSet = wire.NewSet(mapper.NewKnowledgeBaseMapper, wire.Bind(new(repository3.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)), wire.Bind(new(repository3.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)), adapter.NewObjectStorageAdapter, adapter2.NewKnowledgeTextExtractor, adapter3.NewKnowledgeVectorizePublisher, service3.NewUploadKnowledgeBaseService, service3.NewKnowledgeBaseListService, service3.NewDeleteKnowledgeBaseService, service3.NewDownloadKnowledgeBaseService, service3.NewUpdateKnowledgeBaseCategoryService, service3.NewRevectorizeKnowledgeBaseService, wire.Struct(new(controller3.KnowledgeBaseController), "*"))
+
+// RAG 对话：会话 CRUD（流式发消息仍占位时由控制器单独返回 501）。
+var ragModuleSet = wire.NewSet(mapper.NewRagChatMapper, wire.Bind(new(repository4.RagChatRepository), new(*mapper.RagChatMapper)), service4.NewRagChatSessionService, wire.Struct(new(controller4.RagChatController), "*"))
 
 // provideMaxResumeUploadBytes 抽取 cfg 字段给 ResumeUploadService 用，避免 wire 直接把 cfg.Xxx 当 int64 provider。
 func provideMaxResumeUploadBytes(cfg *config.Config) int64 {
@@ -131,10 +157,10 @@ func provideInterviewSessionCache(rdb *redis.Client) repository2.InterviewSessio
 	return adapter3.NewSessionCache(rdb)
 }
 
-// provideInterviewQuestionGenerator OpenAI 客户端未就绪时退回 Stub，与 deps 中 oa 启动失败时一致。
+// provideInterviewQuestionGenerator 依赖可用的 OpenAI 客户端；不满足则 panic（禁止 Stub 兜底）。
 func provideInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Config, lg *zap.Logger) repository2.InterviewQuestionGenerator {
 	if oa == nil {
-		return ai.NewStubInterviewQuestionGenerator()
+		panic("interview-guide-go: OpenAIService required for InterviewQuestionGenerator")
 	}
 	return adapter4.NewOpenAIInterviewQuestionGenerator(oa, cfg, lg)
 }

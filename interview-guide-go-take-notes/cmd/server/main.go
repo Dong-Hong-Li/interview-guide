@@ -35,7 +35,7 @@ func main() {
 	apiControllers, cleanupDeps := StartDeps(context.Background(), lg, cfg)
 	defer cleanupDeps()
 	// 注册 HTTP 路由
-	httpHandlers := httpserver.RegistrationRoutes(lg, cfg.HTTPAccessLogSuppress, apiControllers)
+	httpHandlers := httpserver.RegistrationRoutes(lg, cfg, apiControllers)
 	// 创建 HTTP 服务器
 	httpServer := newHttpServer(cfg, httpHandlers)
 

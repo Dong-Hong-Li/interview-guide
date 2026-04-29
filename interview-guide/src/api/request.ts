@@ -96,17 +96,19 @@ export const request = {
   },
 
   /**
-   * 文件上传
+   * 文件上传（multipart/form-data）。
+   * - 不传 Content-Type：由浏览器/XHR 为 FormData 自动带边界（boundary）；手动写 `multipart/form-data` 会缺 boundary，
+   *   易出现服务端解析异常或长时间读不完整。
+   * - 默认约 25MB：与简历上传一致；更大文件（如知识库 50MB）由调用方在 config 里传 `maxBodyLength` / `maxContentLength` 覆盖。
    */
   upload<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
-    const maxBytes = 25 * 1024 * 1024; // 略高于简历 20MB 上限，含 multipart 边界开销
+    const defaultResumeMaxBytes = 60 * 1024 * 1024;
     return instance.post(url, formData, {
       timeout: 600000,
-      maxBodyLength: maxBytes,
-      maxContentLength: maxBytes,
-      headers: { 'Content-Type': 'multipart/form-data' },
+      maxBodyLength: defaultResumeMaxBytes,
+      maxContentLength: defaultResumeMaxBytes,
       ...config,
-    }).then(res => res.data);
+    }).then((res) => res.data);
   },
 
   /**

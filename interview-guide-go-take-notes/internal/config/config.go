@@ -28,6 +28,9 @@ type Config struct {
 	// HTTPAccessLogSuppress 访问日志抑制规则
 	HTTPAccessLogSuppress []AccessLogSuppressRule
 
+	// CorsAllowedOrigins 必填（逗号分隔，见环境变量 CORS_ALLOWED_ORIGINS）；例如本地前端 http://localhost:5173。
+	CorsAllowedOrigins []string
+
 	// 简历上传单文件大小上限
 	MaxResumeUploadBytes int64
 }
@@ -57,6 +60,11 @@ func LoadEnvironmentVariables() *Config {
 	// HTTP 访问日志屏蔽规则
 	httpAccessLogSuppress := parseHTTPAccessLogSuppress()
 
+	corsAllowedOrigins := parseCORSAllowedOrigins()
+	if len(corsAllowedOrigins) == 0 {
+		log.Fatalf("%s: %s", errmsg.LogFatalValidateCORSConfig, errmsg.ConfigCORSAllowedOriginsRequired)
+	}
+
 	// 简历上传单文件大小上限
 	maxResumeUploadBytes := parseMaxResumeUploadBytes()
 	return &Config{
@@ -66,6 +74,7 @@ func LoadEnvironmentVariables() *Config {
 		Storage:               *storageConfig,
 		Openai:                *openaiConfig,
 		HTTPAccessLogSuppress: httpAccessLogSuppress,
+		CorsAllowedOrigins:    corsAllowedOrigins,
 		MaxResumeUploadBytes:  maxResumeUploadBytes,
 	}
 }
@@ -75,13 +84,31 @@ type AccessLogSuppressRule struct {
 	Pattern string
 }
 
-// HTTP 访问日志屏蔽规则
-// GET /api/interview/sessions/*（轮询 GET /api/interview/sessions/{id}，
-// 不影响列表与 /unfinished/、/{id}/details 等），GET /api/resumes/*/detail（简历详情）
+// HTTP 访问日志屏蔽规则（path.Match）；含面试页轮询、简历详情、知识库列表页三组轮询 GET。
+// parseCORSAllowedOrigins 读取 CORS_ALLOWED_ORIGINS（逗号分隔）；至少须有一项（否则 LoadEnvironmentVariables 失败）。
+func parseCORSAllowedOrigins() []string {
+	raw := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func parseHTTPAccessLogSuppress() []AccessLogSuppressRule {
 	accessLogSuppressRules := []AccessLogSuppressRule{
 		{Method: "GET", Pattern: "/api/interview/sessions/*"},
 		{Method: "GET", Pattern: "/api/resumes/*/detail"},
+		// 知识库管理页三路轮询（list / stats / categories）
+		{Method: "GET", Pattern: "/api/knowledgebase/list"},
+		{Method: "GET", Pattern: "/api/knowledgebase/stats"},
+		{Method: "GET", Pattern: "/api/knowledgebase/categories"},
 	}
 	return accessLogSuppressRules
 }

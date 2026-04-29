@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"interview-guide-go/internal/application/ragchat/model"
+	"interview-guide-go/internal/application/ragchat/service"
 	"interview-guide-go/internal/interfaces/http/binding"
 	"interview-guide-go/shared/errmsg"
 	"interview-guide-go/shared/response"
@@ -12,8 +13,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// RagChatController RAG 对话 HTTP 适配层；当前全部端点固定返回 501（与主项目占位策略一致，实现后置）。
-type RagChatController struct{}
+// RagChatController RAG 对话 HTTP 适配层；流式发消息仍为 501。
+type RagChatController struct {
+	SessionService *service.RagChatSessionService
+}
 
 // Register 将 /api/rag-chat/* 注册到 r。
 func (c *RagChatController) Register(r chi.Router) {
@@ -29,44 +32,110 @@ func (c *RagChatController) Register(r chi.Router) {
 	})
 }
 
-// createSession POST /api/rag-chat/sessions：创建 RAG 对话会话；当前 501 占位，实现后与主项目 rag-chat 对齐。
-func (*RagChatController) createSession(_ context.Context, _ model.RagChatCreateSessionReq) (any, error) {
-	return nil, notImplemented("ragChat.createSession")
+// createSession POST /api/rag-chat/sessions
+func (c *RagChatController) createSession(ctx context.Context, req model.RagChatCreateSessionReq) (any, error) {
+	if c == nil || c.SessionService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return nil, err
+	}
+	return c.SessionService.Create(ctx, req.Title, req.KnowledgeBaseIds)
 }
 
-// listSessions GET /api/rag-chat/sessions：会话列表（分页/排序以主产品为准）；当前 501 占位。
-func (*RagChatController) listSessions(_ context.Context) (any, error) {
-	return nil, notImplemented("ragChat.listSessions")
+// listSessions GET /api/rag-chat/sessions
+func (c *RagChatController) listSessions(ctx context.Context) (any, error) {
+	if c == nil || c.SessionService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	return c.SessionService.List(ctx)
 }
 
-// sendMessageStream POST /api/rag-chat/sessions/{sessionId}/messages/stream：基于所选知识库流式发消息、SSE 出字；当前 501 占位。
+// sendMessageStream POST /api/rag-chat/sessions/{sessionId}/messages/stream
 func (*RagChatController) sendMessageStream(_ context.Context, _ model.RagChatSendMessageReq) (any, error) {
 	return nil, notImplemented("ragChat.sendMessageStream")
 }
 
-// getSessionDetail GET /api/rag-chat/sessions/{sessionId}：会话详情与历史消息；当前 501 占位。
-func (*RagChatController) getSessionDetail(_ context.Context, _ model.RagChatSessionPathReq) (any, error) {
-	return nil, notImplemented("ragChat.getSessionDetail")
+// getSessionDetail GET /api/rag-chat/sessions/{sessionId}
+func (c *RagChatController) getSessionDetail(ctx context.Context, req model.RagChatSessionPathReq) (any, error) {
+	if c == nil || c.SessionService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return nil, err
+	}
+	if req.SessionID < 1 {
+		return nil, response.Err(http.StatusBadRequest, "invalid session id")
+	}
+	return c.SessionService.GetDetail(ctx, req.SessionID)
 }
 
-// updateSessionTitle PUT /api/rag-chat/sessions/{sessionId}/title：修改会话标题；当前 501 占位。
-func (*RagChatController) updateSessionTitle(_ context.Context, _ model.RagChatUpdateTitleReq) (any, error) {
-	return nil, notImplemented("ragChat.updateSessionTitle")
+// updateSessionTitle PUT /api/rag-chat/sessions/{sessionId}/title
+func (c *RagChatController) updateSessionTitle(ctx context.Context, req model.RagChatUpdateTitleReq) (string, error) {
+	if c == nil || c.SessionService == nil {
+		return "", response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return "", err
+	}
+	if req.SessionID < 1 {
+		return "", response.Err(http.StatusBadRequest, "invalid session id")
+	}
+	if err := c.SessionService.UpdateTitle(ctx, req.SessionID, req.Title); err != nil {
+		return "", err
+	}
+	return errmsg.RagChatUpdateTitleSuccess, nil
 }
 
-// updateKnowledgeBases PUT /api/rag-chat/sessions/{sessionId}/knowledge-bases：绑定/切换本会话引用的知识库；当前 501 占位。
-func (*RagChatController) updateKnowledgeBases(_ context.Context, _ model.RagChatUpdateKnowledgeBasesReq) (any, error) {
-	return nil, notImplemented("ragChat.updateKnowledgeBases")
+// updateKnowledgeBases PUT /api/rag-chat/sessions/{sessionId}/knowledge-bases
+func (c *RagChatController) updateKnowledgeBases(ctx context.Context, req model.RagChatUpdateKnowledgeBasesReq) (string, error) {
+	if c == nil || c.SessionService == nil {
+		return "", response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return "", err
+	}
+	if req.SessionID < 1 {
+		return "", response.Err(http.StatusBadRequest, "invalid session id")
+	}
+	if err := c.SessionService.UpdateKnowledgeBases(ctx, req.SessionID, req.KnowledgeBaseIds); err != nil {
+		return "", err
+	}
+	return errmsg.RagChatUpdateKBsSuccess, nil
 }
 
-// togglePin PUT /api/rag-chat/sessions/{sessionId}/pin：会话置顶/取消置顶；当前 501 占位。
-func (*RagChatController) togglePin(_ context.Context, _ model.RagChatSessionPathReq) (any, error) {
-	return nil, notImplemented("ragChat.togglePin")
+// togglePin PUT /api/rag-chat/sessions/{sessionId}/pin
+func (c *RagChatController) togglePin(ctx context.Context, req model.RagChatSessionPathReq) (string, error) {
+	if c == nil || c.SessionService == nil {
+		return "", response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return "", err
+	}
+	if req.SessionID < 1 {
+		return "", response.Err(http.StatusBadRequest, "invalid session id")
+	}
+	if err := c.SessionService.TogglePin(ctx, req.SessionID); err != nil {
+		return "", err
+	}
+	return errmsg.RagChatTogglePinSuccess, nil
 }
 
-// deleteSession DELETE /api/rag-chat/sessions/{sessionId}：删除会话及消息；当前 501 占位。
-func (*RagChatController) deleteSession(_ context.Context, _ model.RagChatSessionPathReq) (any, error) {
-	return nil, notImplemented("ragChat.deleteSession")
+// deleteSession DELETE /api/rag-chat/sessions/{sessionId}
+func (c *RagChatController) deleteSession(ctx context.Context, req model.RagChatSessionPathReq) (string, error) {
+	if c == nil || c.SessionService == nil {
+		return "", response.Err(http.StatusServiceUnavailable, errmsg.RagChatSessionServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return "", err
+	}
+	if req.SessionID < 1 {
+		return "", response.Err(http.StatusBadRequest, "invalid session id")
+	}
+	if err := c.SessionService.Delete(ctx, req.SessionID); err != nil {
+		return "", err
+	}
+	return errmsg.RagChatDeleteSuccess, nil
 }
 
 func notImplemented(h string) error {

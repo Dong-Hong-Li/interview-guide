@@ -51,6 +51,14 @@ type RagChatMessage struct {
 
 func (RagChatMessage) TableName() string { return "rag_chat_messages" }
 
+// RagSessionKnowledgeBase 表 rag_session_knowledge_bases（会话 ↔ 知识库多对多）。
+type RagSessionKnowledgeBase struct {
+	SessionID       int64 `gorm:"column:session_id;primaryKey"`
+	KnowledgeBaseID int64 `gorm:"column:knowledge_base_id;primaryKey"`
+}
+
+func (RagSessionKnowledgeBase) TableName() string { return "rag_session_knowledge_bases" }
+
 func (m *RagChatMessage) BeforeCreate(_ *gorm.DB) error {
 	now := time.Now()
 	if m.CreatedAt.IsZero() {

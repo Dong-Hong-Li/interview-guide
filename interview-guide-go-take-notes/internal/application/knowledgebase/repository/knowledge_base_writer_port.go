@@ -2,9 +2,16 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	resumerepo "interview-guide-go/internal/application/resume/repository"
 )
+
+// ErrKnowledgeBaseDeleteNoRow 删除时未影响行（如并发下记录已不存在）。
+var ErrKnowledgeBaseDeleteNoRow = errors.New("knowledge base delete: no row affected")
+
+// ErrKnowledgeBaseUpdateNoRow 更新分类时未影响行（如并发下记录已不存在）。
+var ErrKnowledgeBaseUpdateNoRow = errors.New("knowledge base update: no row affected")
 
 // KnowledgeBaseInsert 写入 knowledge_bases 一行（与 ORM 解耦）。
 type KnowledgeBaseInsert struct {
@@ -17,6 +24,13 @@ type KnowledgeBaseInsert struct {
 	StorageKey       string
 	StorageURL       string
 	VectorStatus     string
+}
+
+// KnowledgeBaseChunkInsert 单条分块向量（消费者写入；ChunkIndex 从 0 连续）。
+type KnowledgeBaseChunkInsert struct {
+	ChunkIndex int
+	Content    string
+	Embedding  []float32
 }
 
 // ExistingKnowledgeBase 去重命中时返回的已有行子集。
@@ -44,6 +58,12 @@ type KnowledgeBaseWriter interface {
 	GetVectorMetaByID(ctx context.Context, id int64) (vectorStatus string, found bool, err error)
 	// MarkVectorizationComplete 消费者分块成功后回写 COMPLETED、chunk_count，并清空 vector_error。
 	MarkVectorizationComplete(ctx context.Context, id int64, chunkCount int) error
+	// SaveKnowledgeBaseVectorChunks 事务内删除该 KB 既有分块、写入新向量并置 COMPLETED/chunk_count（与 embedding 写入原子一致）。
+	SaveKnowledgeBaseVectorChunks(ctx context.Context, knowledgeBaseID int64, chunks []KnowledgeBaseChunkInsert) error
+	// DeleteKnowledgeBaseByID 删除知识库行；`rag_session_knowledge_bases` 上 ON DELETE CASCADE 会一并清关联。
+	DeleteKnowledgeBaseByID(ctx context.Context, id int64) error
+	// UpdateKnowledgeBaseCategory 更新 category 列；空串表示未分类。未影响行时返回 ErrKnowledgeBaseUpdateNoRow。
+	UpdateKnowledgeBaseCategory(ctx context.Context, id int64, category string) error
 }
 
 // ObjectStoragePort 复用简历对象存储端口，上传/预签名与 bucket 约定一致。

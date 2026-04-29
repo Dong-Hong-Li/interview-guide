@@ -47,16 +47,16 @@ interfaces  → application/<domain>/controller
 | 文件 | 角色 |
 |------|------|
 | `main.go` | logger → `LoadEnvironmentVariables` → `StartDeps` → `RegistrationRoutes` → `http.Server`；SIGINT/SIGTERM → `Shutdown(15s)` |
-| `deps.go::StartDeps` | 起 Storage/PG/Redis/OpenAI；调 `initializeResumeController` / `initializeInterviewController`；条件启动两条 Stream 消费者 |
-| `wire.go` | `wireinject` build；`resumeModuleSet` / `interviewModuleSet`；`provideMaxResumeUploadBytes` / `provideInterviewSessionCache` / `provideInterviewQuestionGenerator`（OpenAI nil 时自动 stub） |
+| `deps.go::StartDeps` | 起 Storage/PG/Redis/OpenAI；调 wire 初始化控制器；启动 Redis Stream 消费者（前置不满足则 Fatal） |
+| `wire.go` | `wireinject` build；`resumeModuleSet` / `interviewModuleSet`；`provideMaxResumeUploadBytes` / `provideInterviewSessionCache` / `provideInterviewQuestionGenerator`（OpenAI 缺失则 panic） |
 | `wire_gen.go` | `wire` 生成产物，**勿手改**；改 `wire.go` 后跑 `wire ./cmd/server` |
 
 启动失败策略：
 
 - logger / config 致命缺失 → `log.Fatalf`
 - Storage / PG / Redis / OpenAI 任一失败 → 仅 `lg.Error` 后 `return nil, cleanup`，HTTP 不起来
-- 简历分析消费者 / 面试评估消费者：当且仅当 Redis、PG、OpenAI **全就绪**时启动
-- OpenAI 未就绪：面试出题器自动退回 `ai.NewStubInterviewQuestionGenerator`
+- Redis Stream 消费者：`StartDeps` 已成功拉起依赖后须启动；前置不满足 → **Fatal**
+- `provideInterviewQuestionGenerator`：OpenAI 不可用 → **panic**（无 Stub 运行时兜底）
 
 ## 4. HTTP 壳（`internal/interfaces/controller/router.go`）
 
@@ -109,7 +109,7 @@ PDF/二进制端点 **不**走 binding；自管 header（参考 `handleExportInt
 - 端口（`repository/`）：
   - `InterviewSessionWriter` 写库 + 历史题 + 评估流水线 CAS
   - `InterviewSessionCache` Redis 缓存 + `TryAcquireCreatingLock`
-  - `InterviewQuestionGenerator` OpenAI / Stub 双实现
+  - `InterviewQuestionGenerator` 运行时仅为 OpenAI 实现（wire 注入）
   - `InterviewEvaluateEnqueuer` 入队
   - `InterviewerRoleReader` / `ResumeTextSource` 由 `*ResumeMapper` 同时实现，靠 `wire.Bind` 复用
 
@@ -201,7 +201,7 @@ Client → POST /api/interview/sessions → controller
          ├─ TryAcquireCreatingLock (Redis SETNX, 10min)    # 防并发
          ├─ GetHistoricalQuestionsByResumeID
          ├─ InterviewerRoleByResumeID                       # *ResumeMapper 复用
-         ├─ GenerateQuestions (OpenAI / Stub, ctx 已 WithoutCancel + 10min)
+         ├─ GenerateQuestions (OpenAI，ctx 已 WithoutCancel + 10min)
          ├─ Cache.SaveSession
          └─ InsertInterviewSession
        ← Result{200, "success", InterviewSession}

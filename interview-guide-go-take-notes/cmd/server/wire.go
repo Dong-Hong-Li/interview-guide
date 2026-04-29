@@ -22,6 +22,9 @@ import (
 	kbctl "interview-guide-go/internal/application/knowledgebase/controller"
 	kbrepo "interview-guide-go/internal/application/knowledgebase/repository"
 	kbsvc "interview-guide-go/internal/application/knowledgebase/service"
+	ragctl "interview-guide-go/internal/application/ragchat/controller"
+	ragrepo "interview-guide-go/internal/application/ragchat/repository"
+	ragsvc "interview-guide-go/internal/application/ragchat/service"
 	resume "interview-guide-go/internal/application/resume/controller"
 	resumerepo "interview-guide-go/internal/application/resume/repository"
 	resumesvc "interview-guide-go/internal/application/resume/service"
@@ -77,15 +80,29 @@ var interviewModuleSet = wire.NewSet(
 	wire.Struct(new(ivctl.InterviewController), "*"),
 )
 
-// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）与其它端点仍多为占位。
+// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）、下载、重向量化等；query/query/stream 仍占位。
 var knowledgeModuleSet = wire.NewSet(
 	mapper.NewKnowledgeBaseMapper,
 	wire.Bind(new(kbrepo.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)),
+	wire.Bind(new(kbrepo.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)),
 	storageadapter.NewObjectStorageAdapter,
 	fileadapter.NewKnowledgeTextExtractor,
 	redisadapter.NewKnowledgeVectorizePublisher,
 	kbsvc.NewUploadKnowledgeBaseService,
+	kbsvc.NewKnowledgeBaseListService,
+	kbsvc.NewDeleteKnowledgeBaseService,
+	kbsvc.NewDownloadKnowledgeBaseService,
+	kbsvc.NewUpdateKnowledgeBaseCategoryService,
+	kbsvc.NewRevectorizeKnowledgeBaseService,
 	wire.Struct(new(kbctl.KnowledgeBaseController), "*"),
+)
+
+// RAG 对话：会话 CRUD（流式发消息仍占位时由控制器单独返回 501）。
+var ragModuleSet = wire.NewSet(
+	mapper.NewRagChatMapper,
+	wire.Bind(new(ragrepo.RagChatRepository), new(*mapper.RagChatMapper)),
+	ragsvc.NewRagChatSessionService,
+	wire.Struct(new(ragctl.RagChatController), "*"),
 )
 
 // provideMaxResumeUploadBytes 抽取 cfg 字段给 ResumeUploadService 用，避免 wire 直接把 cfg.Xxx 当 int64 provider。
@@ -98,10 +115,10 @@ func provideInterviewSessionCache(rdb *redis.Client) ivrepo.InterviewSessionCach
 	return redisadapter.NewSessionCache(rdb)
 }
 
-// provideInterviewQuestionGenerator OpenAI 客户端未就绪时退回 Stub，与 deps 中 oa 启动失败时一致。
+// provideInterviewQuestionGenerator 依赖可用的 OpenAI 客户端；不满足则 panic（禁止 Stub 兜底）。
 func provideInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Config, lg *zap.Logger) ivrepo.InterviewQuestionGenerator {
 	if oa == nil {
-		return ai.NewStubInterviewQuestionGenerator()
+		panic("interview-guide-go: OpenAIService required for InterviewQuestionGenerator")
 	}
 	return aiq.NewOpenAIInterviewQuestionGenerator(oa, cfg, lg)
 }
@@ -140,4 +157,9 @@ func initializeKnowledgeBaseController(
 	storeSvc *storage.StorageService,
 ) *kbctl.KnowledgeBaseController {
 	panic(wire.Build(knowledgeModuleSet))
+}
+
+// initializeRagChatController RAG 对话域（/api/rag-chat/*），仅依赖 Postgres。
+func initializeRagChatController(db *gorm.DB) *ragctl.RagChatController {
+	panic(wire.Build(ragModuleSet))
 }

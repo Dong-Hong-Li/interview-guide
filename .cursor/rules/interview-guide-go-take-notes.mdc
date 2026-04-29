@@ -32,7 +32,7 @@ alwaysApply: false
 | 新增/修改 HTTP 端点 | path 常量进 `controller/api.go`；用 `binding.Handle[Req,Resp]`；入参在 `model/request_param.go`；**在 controller 完成全部 HTTP 入参校验与可解析性检查**；封 `Validated*` 再调 service；错误用 `response.Err`/`BizErr` |
 | 新增应用服务/用例 | 一用例一文件；构造函数 `NewXService(...)`；**只接 `Validated*` 或领域入参，不重复校验 HTTP 请求**；只依赖 `repository/*Port`；长跑路径 `context.WithoutCancel(ctx) + WithTimeout` |
 | 新增仓储端口/实现 | 端口在 `application/<domain>/repository/*.go`；Mapper 在 `infrastructure/postgres/mapper/`；末尾加 `var _ repository.X = (*XMapper)(nil)`；GORM 模型只在 `grom/` 包内出现 |
-| 改 Wire 装配 | 改 `cmd/server/wire.go` 后必须在 `cmd/server/` 下跑 `wire`；`wire_gen.go` 与业务变更**拆分** commit；接口冲突走 `wire.Bind`，nil 兜底走专门 `provideXxx` |
+| 改 Wire 装配 | 改 `cmd/server/wire.go` 后必须在 `cmd/server/` 下跑 `wire`；`wire_gen.go` 与业务变更**拆分** commit；接口冲突走 `wire.Bind`；**禁止**用 Stub 等方式对缺依赖静默兜底（须显式装配或启动失败） |
 | 改 Redis Stream 消费者 | 文件 `<scenario>_consumer.go`；`ensure*Group` 处理 BUSYGROUP/NOGROUP；处理失败必须 `MarkXxxFailed` 后再 `XAck`；消费者名带 PID |
 | 改配置 | `internal/config/<topic>_config.go` 加结构体 + `validateXxxConfig()`；`LogStartup` 加脱敏日志；必填缺失直接 `log.Fatalf` |
 | 改 PDF/二进制端点 | 不走 `binding.Handle`；自管 `Content-Type: application/pdf` + `pdfexport.ContentDispositionRFC5987(name)`；错误仍 `response.WriteErr(w, err)` |
@@ -62,7 +62,7 @@ evaluate_status: PENDING → PROCESSING → COMPLETED / FAILED
 - `interviewSessionCache.TryAcquireCreatingLock(resumeID, 10min)` 走 Redis SETNX；TTL 必须与 `createInterviewWorkMax` 对齐。
 - `workCtx = context.WithoutCancel(ctx)` + `WithTimeout(10min)`：避免反代 ~90s 断连导致 LLM/落库 `context canceled`。
 - 释放锁的 cleanup 子 ctx **必须** `WithoutCancel(ctx)` 再 `WithTimeout(5s)`。
-- OpenAI 客户端为 nil 时自动 stub（`ai.NewStubInterviewQuestionGenerator`），由 `provideInterviewQuestionGenerator` 兜底。
+- OpenAI 客户端不可用时不允许 Stub 兜底：`provideInterviewQuestionGenerator` 在无客户端时 **panic**（须保证依赖已成功装配）。
 
 ## 5. 错误与日志（一眼模板）
 

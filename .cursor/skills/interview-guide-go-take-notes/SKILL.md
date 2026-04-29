@@ -14,7 +14,7 @@ description: Encodes architecture, coding conventions, and workflow rules for th
 - `internal/db/` 当前为空目录；GORM 模型实际在 `internal/infrastructure/postgres/grom/`（拼写就是 `grom`，不要改）。
 - `internal/infrastructure/*` **不得** import `internal/interfaces/*`；面试报告/题目等共用结构以 `application/.../model/results` 为准。
 - 状态字面量唯一真理：`shared/interview/session_status.go`；状态判断走 `internal/domain/interview/` 的门禁函数。
-- 知识库 14 个 + RAG 8 个端点为 501 占位，控制器已到位，只能补 service/repository/infrastructure。
+- 知识库部分端点、RAG 流式发消息等仍为 501；实现时补 service/repository/mapper，并同步 `docs/开发进度.md`。
 - 主项目是 Java 后端；语义对齐 Java，但**实现细节以本仓库代码为准**，禁止套 Java 的 `modules/*` / `router/router.go` 目录习惯。
 
 ## 1. 三铁律
@@ -31,7 +31,7 @@ description: Encodes architecture, coding conventions, and workflow rules for th
 | 新增/修改 HTTP 端点 | `conventions.md §HTTP` + `architecture.md §HTTP` | path 常量进 `controller/api.go`；用 `binding.Handle[Req,Resp]`；**在 controller 完成全部 HTTP 入参校验**；封 `Validated*` 传 service；错误用 `response.Err`/`BizErr` |
 | 新增应用服务/用例 | `conventions.md §服务` | 一用例一文件；构造函数 `NewXService(...)`；**只接 `Validated*` 等已就绪入参，不重复 HTTP 校验**；只依赖 `repository/*Port`；长跑路径 `context.WithoutCancel(ctx) + WithTimeout` |
 | 新增仓储端口/实现 | `conventions.md §端口与适配器` | 端口在 `application/<domain>/repository/*.go`；Mapper 在 `infrastructure/postgres/mapper/`；末尾加 `var _ repository.X = (*XMapper)(nil)`；GORM 模型只在 `grom/` 包内出现 |
-| 改 Wire 装配 | `conventions.md §Wire` | 改 `cmd/server/wire.go` 后必须在 `cmd/server/` 下跑 `wire`；`wire_gen.go` 与业务变更**拆分** commit；接口冲突走 `wire.Bind`，nil 兜底走专门 `provideXxx` |
+| 改 Wire 装配 | `conventions.md §Wire` | 改 `cmd/server/wire.go` 后必须在 `cmd/server/` 下跑 `wire`；`wire_gen.go` 与业务变更**拆分** commit；接口冲突走 `wire.Bind`；**禁止**运行时 Stub 静默顶替缺依赖 |
 | 改 Redis Stream 消费者 | `architecture.md §异步链路` | 文件 `<scenario>_consumer.go`；`ensure*Group` 处理 BUSYGROUP/NOGROUP；处理失败必须 `MarkXxxFailed` 后再 `XAck`；消费者名带 PID |
 | 改配置 | `conventions.md §配置` | `internal/config/<topic>_config.go` 加结构体 + `validateXxxConfig()`；`LogStartup` 加脱敏日志；必填缺失直接 `log.Fatalf` |
 | 改 PDF/二进制端点 | `conventions.md §HTTP §PDF` | 不走 `binding.Handle`；自管 `Content-Type: application/pdf` + `pdfexport.ContentDispositionRFC5987(name)`；错误仍 `response.WriteErr(w, err)` |
@@ -43,8 +43,8 @@ description: Encodes architecture, coding conventions, and workflow rules for th
 | 文件 | 角色 | 改动须知 |
 |------|------|---------|
 | `main.go` | 启动 logger → 加载 config → `StartDeps` → 路由 → `http.Server`（SIGINT/SIGTERM 优雅停机） | HTTP 写超时已设 15min，不要再缩短 |
-| `deps.go` | 组合根：起 Storage/PG/Redis/OpenAI；委托 wire 构造控制器；条件启动 2 个消费者 | 新基础设施加在此处；任意失败 `return nil, cleanup` |
-| `wire.go` | `wireinject` build tag；`resumeModuleSet` / `interviewModuleSet`；接口绑定与 stub 回退 | `*ResumeMapper` 同时实现 `InterviewerRoleReader` + `ResumeTextSource`，复用而非新建包装 |
+| `deps.go` | 组合根：起 Storage/PG/Redis/OpenAI；委托 wire 构造控制器；启动 Redis Stream 消费者（简历分析 / 面试评估 / 知识库向量化） | 新基础设施加在此处；基础设施任一失败 `return nil, cleanup`；消费者前置不满足 **Fatal** |
+| `wire.go` | `wireinject` build tag；多个 ProviderSet；接口绑定 | `*ResumeMapper` 同时实现 `InterviewerRoleReader` + `ResumeTextSource`，复用而非新建包装 |
 | `wire_gen.go` | wire 生成产物，**勿手改** | 改完 `wire.go` 必须重新生成 |
 
 ## 4. 状态机（面试会话）
@@ -72,7 +72,7 @@ evaluate_status: PENDING → PROCESSING → COMPLETED / FAILED
 - `interviewSessionCache.TryAcquireCreatingLock(resumeID, 10min)` 走 Redis SETNX；TTL 必须与 `createInterviewWorkMax` 对齐。
 - `workCtx = context.WithoutCancel(ctx)` + `WithTimeout(10min)`：避免反代 ~90s 断连导致 LLM/落库 `context canceled`。
 - 释放锁的 cleanup 子 ctx **必须** `WithoutCancel(ctx)` 再 `WithTimeout(5s)`。
-- OpenAI 客户端为 nil 时自动 stub（`ai.NewStubInterviewQuestionGenerator`），由 `provideInterviewQuestionGenerator` 兜底。
+- `provideInterviewQuestionGenerator`：OpenAI 客户端缺失时 **panic**（须保证 `StartDeps` 已成功构造 `OpenAIService`）。
 
 ## 6. 错误与日志（一眼模板）
 

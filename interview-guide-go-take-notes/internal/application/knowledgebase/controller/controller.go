@@ -2,14 +2,17 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"strconv"
 	"strings"
 
 	"interview-guide-go/internal/application/knowledgebase/model"
 	"interview-guide-go/internal/application/knowledgebase/service"
 	domainkb "interview-guide-go/internal/domain/knowledgebase"
+	pdfexport "interview-guide-go/internal/infrastructure/pdf"
 	"interview-guide-go/internal/interfaces/http/binding"
 	"interview-guide-go/shared/errmsg"
 	"interview-guide-go/shared/response"
@@ -17,24 +20,29 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// KnowledgeBaseController 知识库 HTTP 适配层；upload 已实现，其余端点多为 501 占位。
+// KnowledgeBaseController 知识库 HTTP 适配层；检索类 query/query/stream 仍有 501 占位。
 type KnowledgeBaseController struct {
-	UploadService *service.UploadKnowledgeBaseService
+	UploadService         *service.UploadKnowledgeBaseService
+	ListService           *service.KnowledgeBaseListService
+	DeleteService         *service.DeleteKnowledgeBaseService
+	DownloadService       *service.DownloadKnowledgeBaseService
+	UpdateCategoryService *service.UpdateKnowledgeBaseCategoryService
+	RevectorizeService    *service.RevectorizeKnowledgeBaseService
 }
 
 // Register 将 /api/knowledgebase/* 注册到 r。
 func (c *KnowledgeBaseController) Register(r chi.Router) {
 	r.Route(APIMountPath, func(sr chi.Router) {
 		sr.Post(PathPostUpload, binding.Handle(c.uploadKnowledgeBase))
-		sr.Get(PathGetList, binding.Exec(c.getAllKnowledgeBases))
+		sr.Get(PathGetList, binding.Handle(c.getAllKnowledgeBases))
 		sr.Get(PathGetCategories, binding.Exec(c.getAllCategories))
 		sr.Get(PathGetByCategory, binding.Handle(c.getByCategory))
-		sr.Get(PathGetUncategorized, binding.Exec(c.getUncategorized))
+		sr.Get(PathGetUncategorized, binding.Handle(c.getUncategorized))
 		sr.Get(PathGetSearch, binding.Handle(c.search))
 		sr.Get(PathGetStats, binding.Exec(c.getStatistics))
 		sr.Post(PathPostQueryStream, binding.Handle(c.queryKnowledgeBaseStream))
 		sr.Post(PathPostQuery, binding.Handle(c.queryKnowledgeBase))
-		sr.Get(PathGetByIDDownload, binding.Handle(c.downloadKnowledgeBase))
+		sr.Get(PathGetByIDDownload, c.handleDownloadKnowledgeBase)
 		sr.Get(PathByID, binding.Handle(c.getKnowledgeBase))
 		sr.Delete(PathByID, binding.Handle(c.deleteKnowledgeBase))
 		sr.Put(PathPutByIDCategory, binding.Handle(c.updateCategory))
@@ -78,7 +86,7 @@ func (c *KnowledgeBaseController) uploadKnowledgeBase(ctx context.Context, reque
 	}
 	// 3. 大小：非空、不超过 50MB
 	if err := domainkb.ValidateFile(fh); err != nil {
-		return nil, response.Err(http.StatusBadRequest, err.Error())
+		return nil, response.Err(http.StatusBadRequest, "文件超过最大大小50MB")
 	}
 	name := strings.TrimSpace(request.Name)
 	if name == "" {
@@ -95,34 +103,65 @@ func (c *KnowledgeBaseController) uploadKnowledgeBase(ctx context.Context, reque
 	return c.UploadService.Upload(ctx, validated)
 }
 
-// getAllKnowledgeBases GET /api/knowledgebase/list：知识库条目列表；当前 501 占位。
-func (*KnowledgeBaseController) getAllKnowledgeBases(_ context.Context) (any, error) {
-	return nil, notImplemented("knowledgebase.getAllKnowledgeBases")
+// getAllKnowledgeBases GET /api/knowledgebase/list：与 Java listKnowledgeBases（sortBy、vectorStatus）一致。
+func (c *KnowledgeBaseController) getAllKnowledgeBases(ctx context.Context, req model.KBListQueryReq) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	vs := strings.TrimSpace(req.VectorStatus)
+	if vs != "" && !domainkb.IsValidVectorStatus(vs) {
+		return nil, response.Err(http.StatusBadRequest, "无效的向量化状态: "+vs)
+	}
+	var vsp *string
+	if vs != "" {
+		u := strings.ToUpper(vs)
+		vsp = &u
+	}
+	return c.ListService.List(ctx, vsp, strings.TrimSpace(req.SortBy))
 }
 
-// getAllCategories GET /api/knowledgebase/categories：全部分类枚举；当前 501 占位。
-func (*KnowledgeBaseController) getAllCategories(_ context.Context) (any, error) {
-	return nil, notImplemented("knowledgebase.getAllCategories")
+// getAllCategories GET /api/knowledgebase/categories：全部分类枚举。
+func (c *KnowledgeBaseController) getAllCategories(ctx context.Context) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	return c.ListService.Categories(ctx)
 }
 
-// getUncategorized GET /api/knowledgebase/uncategorized：未分类条目列表；当前 501 占位。
-func (*KnowledgeBaseController) getUncategorized(_ context.Context) (any, error) {
-	return nil, notImplemented("knowledgebase.getUncategorized")
+// getUncategorized GET /api/knowledgebase/uncategorized：未分类条目列表；查询参数 `sortBy` 同 list。
+func (c *KnowledgeBaseController) getUncategorized(ctx context.Context, req model.KBUncategorizedQueryReq) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	return c.ListService.ListUncategorized(ctx, strings.TrimSpace(req.SortBy))
 }
 
-// getStatistics GET /api/knowledgebase/stats：条数/空间等统计；当前 501 占位。
-func (*KnowledgeBaseController) getStatistics(_ context.Context) (any, error) {
-	return nil, notImplemented("knowledgebase.getStatistics")
+// getStatistics GET /api/knowledgebase/stats：与 Java getStatistics 一致。
+func (c *KnowledgeBaseController) getStatistics(ctx context.Context) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	return c.ListService.Statistics(ctx)
 }
 
-// getByCategory GET /api/knowledgebase/category/{category}：按分类筛选列表；当前 501 占位。
-func (*KnowledgeBaseController) getByCategory(_ context.Context, _ model.KBCategoryPathReq) (any, error) {
-	return nil, notImplemented("knowledgebase.getByCategory")
+// getByCategory GET /api/knowledgebase/category/{category}：按分类筛选；查询参数 `sortBy` 同 list。
+func (c *KnowledgeBaseController) getByCategory(ctx context.Context, req model.KBCategoryPathReq) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	cat := strings.TrimSpace(req.Category)
+	if cat == "" {
+		return nil, response.Err(http.StatusBadRequest, errmsg.KnowledgeBaseCategoryEmpty)
+	}
+	return c.ListService.ListByCategory(ctx, cat, strings.TrimSpace(req.SortBy))
 }
 
-// search GET /api/knowledgebase/search：关键词/元数据/向量检索等以主产品为准；当前 501 占位。
-func (*KnowledgeBaseController) search(_ context.Context, _ model.KBSearchReq) (any, error) {
-	return nil, notImplemented("knowledgebase.search")
+// search GET /api/knowledgebase/search?keyword= 与 Java search、前端 knowledgeBaseApi.search 一致。
+func (c *KnowledgeBaseController) search(ctx context.Context, req model.KBSearchReq) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	return c.ListService.Search(ctx, req.Keyword)
 }
 
 // queryKnowledgeBaseStream POST /api/knowledgebase/query/stream：对知识库做检索 + LLM 流式回答；当前 501 占位。
@@ -135,29 +174,93 @@ func (*KnowledgeBaseController) queryKnowledgeBase(_ context.Context, _ model.KB
 	return nil, notImplemented("knowledgebase.queryKnowledgeBase")
 }
 
-// downloadKnowledgeBase GET /api/knowledgebase/{id}/download：下载原始文件；当前 501 占位。
-func (*KnowledgeBaseController) downloadKnowledgeBase(_ context.Context, _ model.KBIDPathReq) (any, error) {
-	return nil, notImplemented("knowledgebase.downloadKnowledgeBase")
+// handleDownloadKnowledgeBase GET /api/knowledgebase/{id}/download：返回对象存储中的原始文件二进制（非 JSON Result）。
+func (c *KnowledgeBaseController) handleDownloadKnowledgeBase(w http.ResponseWriter, r *http.Request) {
+	if c == nil || c.DownloadService == nil {
+		response.ErrJSON(w, http.StatusServiceUnavailable, errmsg.KnowledgeBaseDownloadServiceNil)
+		return
+	}
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id < 1 {
+		response.ErrJSON(w, http.StatusBadRequest, "invalid knowledge base id")
+		return
+	}
+	out, err := c.DownloadService.DownloadFile(r.Context(), id)
+	if err != nil {
+		var he *response.Error
+		if errors.As(err, &he) {
+			response.ErrJSON(w, he.Code, he.Message)
+			return
+		}
+		response.WriteErr(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", out.ContentType)
+	w.Header().Set("Content-Disposition", pdfexport.ContentDispositionRFC5987(out.Filename))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(out.Data)
 }
 
-// getKnowledgeBase GET /api/knowledgebase/{id}：单条知识库元数据与状态；当前 501 占位。
-func (*KnowledgeBaseController) getKnowledgeBase(_ context.Context, _ model.KBIDPathReq) (any, error) {
-	return nil, notImplemented("knowledgebase.getKnowledgeBase")
+// getKnowledgeBase GET /api/knowledgebase/{id}：与 Java getKnowledgeBase 一致，返回 KnowledgeBaseListItem。
+func (c *KnowledgeBaseController) getKnowledgeBase(ctx context.Context, req model.KBIDPathReq) (any, error) {
+	if c == nil || c.ListService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
+	}
+	item, err := c.ListService.GetByID(ctx, req.ID)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, response.Err(http.StatusNotFound, errmsg.KnowledgeBaseNotFound)
+	}
+	return item, nil
 }
 
-// deleteKnowledgeBase DELETE /api/knowledgebase/{id}：删除文件、元数据与向量；当前 501 占位。
-func (*KnowledgeBaseController) deleteKnowledgeBase(_ context.Context, _ model.KBIDPathReq) (any, error) {
-	return nil, notImplemented("knowledgebase.deleteKnowledgeBase")
+// deleteKnowledgeBase DELETE /api/knowledgebase/{id}：先尽量删对象存储，再删库行；关联表由 ON DELETE CASCADE 清理。
+func (c *KnowledgeBaseController) deleteKnowledgeBase(ctx context.Context, req model.KBIDPathReq) (string, error) {
+	if c == nil || c.DeleteService == nil {
+		return "", response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseDeleteServiceNil)
+	}
+	if err := c.DeleteService.Delete(ctx, req.ID); err != nil {
+		return "", err
+	}
+	return errmsg.KnowledgeBaseDeleteSuccess, nil
 }
 
-// updateCategory PUT /api/knowledgebase/{id}/category：修改分类；当前 501 占位。
-func (*KnowledgeBaseController) updateCategory(_ context.Context, _ model.KBUpdateCategoryReq) (any, error) {
-	return nil, notImplemented("knowledgebase.updateCategory")
+// updateCategory PUT /api/knowledgebase/{id}/category：body `category` 为 null/省略时置为未分类。
+func (c *KnowledgeBaseController) updateCategory(ctx context.Context, req model.KBUpdateCategoryReq) (string, error) {
+	if c == nil || c.UpdateCategoryService == nil {
+		return "", response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseUpdateCategoryServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return "", err
+	}
+	if req.ID < 1 {
+		return "", response.Err(http.StatusBadRequest, "invalid knowledge base id")
+	}
+	cat := ""
+	if req.Category != nil {
+		cat = strings.TrimSpace(*req.Category)
+	}
+	if len([]rune(cat)) > 100 {
+		return "", response.Err(http.StatusBadRequest, errmsg.KnowledgeBaseCategoryTooLong)
+	}
+	v := &model.ValidatedKBUpdateCategory{ID: req.ID, Category: cat}
+	if err := c.UpdateCategoryService.Update(ctx, v); err != nil {
+		return "", err
+	}
+	return errmsg.KnowledgeBaseUpdateCategorySuccess, nil
 }
 
-// revectorize POST /api/knowledgebase/{id}/revectorize：重新分块与向量化（如换模型后）；当前 501 占位。
-func (*KnowledgeBaseController) revectorize(_ context.Context, _ model.KBIDPathReq) (any, error) {
-	return nil, notImplemented("knowledgebase.revectorize")
+// revectorize POST /api/knowledgebase/{id}/revectorize：从对象存储取原文、复抽正文，置 vector_status=PENDING 后入队（消费者逻辑与上传后一致）。
+func (c *KnowledgeBaseController) revectorize(ctx context.Context, req model.KBIDPathReq) (any, error) {
+	if c == nil || c.RevectorizeService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseRevectorizeServiceNil)
+	}
+	if req.ID < 1 {
+		return nil, response.Err(http.StatusBadRequest, "invalid knowledge base id")
+	}
+	return c.RevectorizeService.Revectorize(ctx, req.ID)
 }
 
 func notImplemented(h string) error {

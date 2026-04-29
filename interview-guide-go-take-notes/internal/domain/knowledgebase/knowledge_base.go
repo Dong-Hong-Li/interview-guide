@@ -24,6 +24,7 @@ func ValidateFile(file *multipart.FileHeader) error {
 }
 
 // ValidateContentType 校验是否为允许的知识库 MIME 类型。
+// 不包含 application/msword（.doc）：抽取层仅支持 PDF / DOCX / 纯文本等，见 infrastructure/file.ExtractKnowledgeBaseText。
 func ValidateContentType(contentType string) error {
 	ct := normalizeMIME(contentType)
 	if ct == "" {
@@ -46,7 +47,6 @@ func normalizeMIME(ct string) string {
 func isAllowedContentType(ct string) bool {
 	switch ct {
 	case "application/pdf",
-		"application/msword",
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		"text/plain",
 		"text/markdown":

@@ -14,7 +14,7 @@
             "program": "${workspaceFolder}/interview-guide-go-take-notes/cmd/server",
             "envFile": "${workspaceFolder}/.env",
             "env": {
-                "AI_MODEL": "kimi-k2.6",
+                "AI_MODEL": "kimi-k2.5",
                 "SERVER_PORT": "8080",
                 "POSTGRES_HOST": "localhost",
                 "POSTGRES_PORT": "5432",

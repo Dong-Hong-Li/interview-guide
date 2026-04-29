@@ -3,6 +3,8 @@ package config
 import (
 	"encoding/json"
 	"net/url"
+	"os"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -66,9 +68,36 @@ func (c *Config) startupSnapshot() map[string]any {
 			"resume_ai_max_runes":             o.ResumeAIMaxRunes,
 			"resume_ai_max_completion_tokens": o.ResumeAIMaxCompletionTokens,
 			"resume_ai_temperature":           o.ResumeAITemperature,
+			"kb_embedding_model":              o.KnowledgeEmbedding.Model,
+			"kb_embedding_dimensions":         o.KnowledgeEmbedding.Dimensions,
+			"kb_embedding_batch_size":         o.KnowledgeEmbedding.BatchSize,
+			"kb_embedding_openai_api_key":     maskSecret(o.KnowledgeEmbedding.GatewayAPIKey),
+			"kb_embedding_openai_base_url":    o.KnowledgeEmbedding.GatewayBaseURL,
+			"kb_embedding_batch_log":          "console(zap logger name knowledge_embedding_http)",
+			"kb_embedding_client": map[string]string{
+				"mode": "dedicated_embedding_gateway",
+			},
+			"kb_chunk_model":                 o.KnowledgeChunking.Model,
+			"kb_chunk_max_input_runes":       o.KnowledgeChunking.MaxInputRunes,
+			"kb_chunk_max_completion_tokens": o.KnowledgeChunking.MaxCompletionTokens,
+			"kb_chunk_temperature":           o.KnowledgeChunking.Temperature,
+			"kb_chunk_env":                   "KB_CHUNK_AI_MODEL | KB_CHUNK_MAX_INPUT_RUNES | KB_CHUNK_MAX_COMPLETION_TOKENS | KB_CHUNK_TEMPERATURE",
+			"kb_vectorize_abort_pending_env": "KB_VECTORIZE_ABORT_PENDING_ON_START (1/true 启动作废 PEL)",
+			"kb_vectorize_abort_pending":     strings.TrimSpace(os.Getenv("KB_VECTORIZE_ABORT_PENDING_ON_START")),
 		},
 		"http_access_log_suppress": c.HTTPAccessLogSuppress,
+		"cors":                     c.corsStartupInfo(),
 	}
+}
+
+func (c *Config) corsStartupInfo() map[string]any {
+	if c == nil {
+		return map[string]any{"mode": "n/a"}
+	}
+	if len(c.CorsAllowedOrigins) == 1 && c.CorsAllowedOrigins[0] == "*" {
+		return map[string]any{"mode": "wildcard", "allow_credentials": false}
+	}
+	return map[string]any{"mode": "explicit", "count": len(c.CorsAllowedOrigins)}
 }
 
 // LogStartup 在进程启动时输出一份配置快照（敏感字段已脱敏）。

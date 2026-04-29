@@ -1,4 +1,4 @@
-import {getErrorMessage, request} from './request';
+import { getErrorMessage, request } from './request';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:8080';
@@ -59,6 +59,11 @@ export interface QueryResponse {
   knowledgeBaseName: string;
 }
 
+// 与后端 domain/knowledgebase.MaxUploadBytes 一致。
+export const KNOWLEDGE_BASE_MAX_FILE_BYTES = 50 * 1024 * 1024;
+// Axios 整包 multipart 字节上限（略大于文件上限）。
+const KNOWLEDGE_UPLOAD_AXIOS_MAX_BODY_BYTES = 52 * 1024 * 1024;
+
 export const knowledgeBaseApi = {
   /**
    * 上传知识库文件
@@ -72,18 +77,21 @@ export const knowledgeBaseApi = {
     if (category) {
       formData.append('category', category);
     }
-    return request.upload<UploadKnowledgeBaseResponse>('/api/knowledgebase/upload', formData);
+    return request.upload<UploadKnowledgeBaseResponse>('/api/knowledgebase/upload', formData, {
+      maxBodyLength: KNOWLEDGE_UPLOAD_AXIOS_MAX_BODY_BYTES,
+      maxContentLength: KNOWLEDGE_UPLOAD_AXIOS_MAX_BODY_BYTES,
+    });
   },
 
-    /**
-     * 下载知识库文件
-     */
-    async downloadKnowledgeBase(id: number): Promise<Blob> {
-        const response = await axios.get(`${API_BASE_URL}/api/knowledgebase/${id}/download`, {
-            responseType: 'blob',
-        });
-        return response.data;
-    },
+  /**
+   * 下载知识库文件
+   */
+  async downloadKnowledgeBase(id: number): Promise<Blob> {
+    const response = await axios.get(`${API_BASE_URL}/api/knowledgebase/${id}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 
   /**
    * 获取所有知识库列表
