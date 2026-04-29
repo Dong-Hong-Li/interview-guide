@@ -30,7 +30,7 @@ import (
 	resumesvc "interview-guide-go/internal/application/resume/service"
 	"interview-guide-go/internal/config"
 	"interview-guide-go/internal/infrastructure/ai"
-	aiq "interview-guide-go/internal/infrastructure/ai/adapter"
+	aiadapter "interview-guide-go/internal/infrastructure/ai/adapter"
 	fileadapter "interview-guide-go/internal/infrastructure/file/adapter"
 	"interview-guide-go/internal/infrastructure/postgres/mapper"
 	redisadapter "interview-guide-go/internal/infrastructure/redis/adapter"
@@ -80,28 +80,42 @@ var interviewModuleSet = wire.NewSet(
 	wire.Struct(new(ivctl.InterviewController), "*"),
 )
 
-// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）、下载、重向量化等；query/query/stream 仍占位。
+// 知识库：上传、列表、向量检索问答（query/query/stream）、下载、重向量化等。
 var knowledgeModuleSet = wire.NewSet(
 	mapper.NewKnowledgeBaseMapper,
 	wire.Bind(new(kbrepo.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)),
 	wire.Bind(new(kbrepo.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)),
+	wire.Bind(new(kbrepo.KnowledgeVectorSearcher), new(*mapper.KnowledgeBaseMapper)),
 	storageadapter.NewObjectStorageAdapter,
 	fileadapter.NewKnowledgeTextExtractor,
 	redisadapter.NewKnowledgeVectorizePublisher,
+	provideKnowledgeBaseEmbedder,
+	provideKnowledgeBaseQueryChat,
+	provideKBQueryMaxQuestionRunes,
 	kbsvc.NewUploadKnowledgeBaseService,
 	kbsvc.NewKnowledgeBaseListService,
 	kbsvc.NewDeleteKnowledgeBaseService,
 	kbsvc.NewDownloadKnowledgeBaseService,
 	kbsvc.NewUpdateKnowledgeBaseCategoryService,
 	kbsvc.NewRevectorizeKnowledgeBaseService,
+	kbsvc.NewKnowledgeBaseQueryService,
 	wire.Struct(new(kbctl.KnowledgeBaseController), "*"),
 )
 
-// RAG 对话：会话 CRUD（流式发消息仍占位时由控制器单独返回 501）。
+// RAG 对话：会话 CRUD + messages/stream（复用 KnowledgeBaseQueryService RAG 链）。
 var ragModuleSet = wire.NewSet(
+	mapper.NewKnowledgeBaseMapper,
+	wire.Bind(new(kbrepo.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)),
+	wire.Bind(new(kbrepo.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)),
+	wire.Bind(new(kbrepo.KnowledgeVectorSearcher), new(*mapper.KnowledgeBaseMapper)),
+	provideKnowledgeBaseEmbedder,
+	provideKnowledgeBaseQueryChat,
+	provideKBQueryMaxQuestionRunes,
+	kbsvc.NewKnowledgeBaseQueryService,
 	mapper.NewRagChatMapper,
 	wire.Bind(new(ragrepo.RagChatRepository), new(*mapper.RagChatMapper)),
 	ragsvc.NewRagChatSessionService,
+	ragsvc.NewRagChatStreamService,
 	wire.Struct(new(ragctl.RagChatController), "*"),
 )
 
@@ -120,7 +134,33 @@ func provideInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Config,
 	if oa == nil {
 		panic("interview-guide-go: OpenAIService required for InterviewQuestionGenerator")
 	}
-	return aiq.NewOpenAIInterviewQuestionGenerator(oa, cfg, lg)
+	return aiadapter.NewOpenAIInterviewQuestionGenerator(oa, cfg, lg)
+}
+
+// provideKnowledgeBaseEmbedder 与向量化消费者同源：KB_EMBEDDING_* 网关 + OpenAIKnowledgeEmbedder。
+func provideKnowledgeBaseEmbedder(cfg *config.Config, lg *zap.Logger, oa *ai.OpenAIService) kbrepo.KnowledgeTextEmbedder {
+	c, err := ai.EmbeddingHTTPClient(cfg, oa)
+	if err != nil {
+		panic("interview-guide-go: EmbeddingHTTPClient: " + err.Error())
+	}
+	return aiadapter.NewOpenAIKnowledgeEmbedder(c, cfg.Openai, lg)
+}
+
+// provideKnowledgeBaseQueryChat 主对话网关 Chat Completions（OPENAI_*），供 query / query/stream 生成答案。
+func provideKnowledgeBaseQueryChat(cfg *config.Config, oa *ai.OpenAIService) kbrepo.KnowledgeBaseQueryChat {
+	if cfg == nil || oa == nil {
+		panic("interview-guide-go: KnowledgeBaseQueryChat prerequisites")
+	}
+	o := cfg.Openai
+	return aiadapter.NewKnowledgeBaseQueryChatAdapter(oa, o.AIModel, o.ResumeAIMaxCompletionTokens, o.ResumeAITemperature)
+}
+
+// provideKBQueryMaxQuestionRunes 抽 cfg，供注入 KnowledgeBaseQueryService（问题过长按 rune 截断）。
+func provideKBQueryMaxQuestionRunes(cfg *config.Config) int {
+	if cfg == nil {
+		return 0
+	}
+	return cfg.Openai.ResumeAIMaxRunes
 }
 
 // initializeResumeController 生成简历控制器。
@@ -155,11 +195,12 @@ func initializeKnowledgeBaseController(
 	db *gorm.DB,
 	rdb *redis.Client,
 	storeSvc *storage.StorageService,
+	oa *ai.OpenAIService,
 ) *kbctl.KnowledgeBaseController {
 	panic(wire.Build(knowledgeModuleSet))
 }
 
-// initializeRagChatController RAG 对话域（/api/rag-chat/*），仅依赖 Postgres。
-func initializeRagChatController(db *gorm.DB) *ragctl.RagChatController {
+// initializeRagChatController RAG 对话域（/api/rag-chat/*），依赖 Postgres + OpenAI（KB 问答链）。
+func initializeRagChatController(cfg *config.Config, lg *zap.Logger, db *gorm.DB, oa *ai.OpenAIService) *ragctl.RagChatController {
 	panic(wire.Build(ragModuleSet))
 }

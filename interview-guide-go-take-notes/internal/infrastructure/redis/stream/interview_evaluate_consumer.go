@@ -8,7 +8,7 @@ import (
 	"interview-guide-go/internal/application/interview/model/results"
 	"interview-guide-go/internal/application/interview/service"
 	domainiv "interview-guide-go/internal/domain/interview"
-	"interview-guide-go/internal/infrastructure/ai"
+	aiadapter "interview-guide-go/internal/infrastructure/ai/adapter"
 	"interview-guide-go/internal/infrastructure/ai/promptprofile"
 	"interview-guide-go/shared/errmsg"
 	"interview-guide-go/shared/logmsg"
@@ -57,7 +57,7 @@ func ensureInterviewEvaluateGroup(ctx context.Context, rdb *redis.Client) error 
 }
 
 // StartInterviewEvaluateConsumer 启动面试 LLM 评估消费者；写库经 EvaluateProcessor + InterviewMapper。
-func StartInterviewEvaluateConsumer(ctx context.Context, rdb *redis.Client, proc *service.EvaluateProcessor, eval *ai.InterviewEvaluator, lg *zap.Logger) {
+func StartInterviewEvaluateConsumer(ctx context.Context, rdb *redis.Client, proc *service.EvaluateProcessor, eval *aiadapter.InterviewEvaluator, lg *zap.Logger) {
 	if rdb == nil || proc == nil || eval == nil {
 		return
 	}
@@ -66,7 +66,7 @@ func StartInterviewEvaluateConsumer(ctx context.Context, rdb *redis.Client, proc
 }
 
 // 运行面试 LLM 评估消费者
-func runInterviewEvaluateConsumer(ctx context.Context, rdb *redis.Client, proc *service.EvaluateProcessor, eval *ai.InterviewEvaluator, lg *zap.Logger, consumer string) {
+func runInterviewEvaluateConsumer(ctx context.Context, rdb *redis.Client, proc *service.EvaluateProcessor, eval *aiadapter.InterviewEvaluator, lg *zap.Logger, consumer string) {
 	// 确保面试评估消费者组存在
 	if err := ensureInterviewEvaluateGroup(ctx, rdb); err != nil {
 		lg.Error(logmsg.MsgInterviewEvaluateCreateConsumerGroup, zap.Error(err))
@@ -119,7 +119,7 @@ func runInterviewEvaluateConsumer(ctx context.Context, rdb *redis.Client, proc *
 }
 
 // 处理面试 LLM 评估消息
-func processInterviewEvaluateMessage(ctx context.Context, rdb *redis.Client, proc *service.EvaluateProcessor, eval *ai.InterviewEvaluator, lg *zap.Logger, msg redis.XMessage) {
+func processInterviewEvaluateMessage(ctx context.Context, rdb *redis.Client, proc *service.EvaluateProcessor, eval *aiadapter.InterviewEvaluator, lg *zap.Logger, msg redis.XMessage) {
 	// 确认消息 ACK : 处理成功（或决定永久丢弃无效消息）后，要调 XACK，告诉 Redis：这条我已经处理完了，可以从 PEL 里删掉。
 	ack := func() {
 		_ = rdb.XAck(ctx, streamkey.StreamInterviewEvaluate, streamkey.GroupInterviewEvaluate, msg.ID).Err()

@@ -16,7 +16,7 @@ type RagChatCreateSessionReq struct {
 // POST /api/rag-chat/sessions/{sessionId}/messages/stream
 type RagChatSendMessageReq struct {
 	SessionID int64  `path:"sessionId" json:"-"`
-	Question  string `json:"question"`
+	Question  string `json:"question" validate:"required"`
 }
 
 // RagChatUpdateTitleReq 更新会话标题（JSON body + path）。

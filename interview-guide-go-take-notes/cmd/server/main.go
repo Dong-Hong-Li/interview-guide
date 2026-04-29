@@ -26,9 +26,9 @@ func main() {
 	defer func() { _ = lg.Sync() }()
 	// =========================
 
-	// 加载环境变量（全量快照见 config.LogStartup；敏感字段已脱敏）
+	// 加载环境变量
 	cfg := config.LoadEnvironmentVariables()
-	cfg.LogStartup(lg)
+	cfg.LogStartup(lg) // 输出配置快照
 	// =========================
 
 	// newDeps 装配所有适配器与应用服务，返回 HTTP API 控制器列表与 cleanup。

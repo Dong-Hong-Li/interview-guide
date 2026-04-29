@@ -1,28 +1,23 @@
-package ai
+package adapter
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"fmt"
-	"interview-guide-go/shared/logmsg"
 	"io/fs"
 	"strings"
 	"sync"
 	"unicode/utf8"
 
+	aicore "interview-guide-go/internal/infrastructure/ai"
+	"interview-guide-go/internal/infrastructure/ai/promptprofile"
+	"interview-guide-go/shared/logmsg"
+
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
 	constpkg "github.com/openai/openai-go/shared/constant"
 	"go.uber.org/zap"
-
-	"interview-guide-go/internal/infrastructure/ai/promptprofile"
 )
-
-// 嵌入式文件系统：必须带 //go:embed，否则 FS 为空，运行时读模板会报 file does not exist。
-//
-//go:embed prompts
-var promptsRoot embed.FS
 
 // 缓存 prompts 模板
 type cachedPrompts struct {
@@ -71,7 +66,7 @@ type ResumeGrader struct {
 	lg                  *zap.Logger
 }
 
-// 创建简历分析器
+// NewResumeGrader 创建简历分析器。
 // model 示例：glm-5.1；temperature 传 1 可兼容默认随机性为 1 的模型；0 则省略 temperature。
 //
 // lg 可为 nil，此时不向日志输出截断等运行信息（等价 zap.NewNop()）。
@@ -96,7 +91,7 @@ func NewResumeGrader(client openai.Client, model string, maxRunes int, maxComple
 	}
 }
 
-// 加载简历分析提示词对
+// loadResumePromptPair 加载简历分析提示词对
 func loadResumePromptPair(interviewerRole string) (system string, userTemplate string, err error) {
 	sub := promptprofile.PromptSubdir(interviewerRole)
 	if v, ok := promptTextCache.Load(sub); ok {
@@ -107,11 +102,11 @@ func loadResumePromptPair(interviewerRole string) (system string, userTemplate s
 	userPath := fmt.Sprintf("prompts/%s/resume-analysis-user.st", sub)
 
 	// 读取系统提示词
-	sysBytes, err := fs.ReadFile(promptsRoot, sysPath)
+	sysBytes, err := fs.ReadFile(aicore.PromptsRoot, sysPath)
 	if err != nil {
 		return "", "", fmt.Errorf("read system prompt %s: %w", sysPath, err)
 	}
-	userBytes, err := fs.ReadFile(promptsRoot, userPath)
+	userBytes, err := fs.ReadFile(aicore.PromptsRoot, userPath)
 	if err != nil {
 		return "", "", fmt.Errorf("read user prompt %s: %w", userPath, err)
 	}
@@ -168,7 +163,7 @@ func (g *ResumeGrader) Grade(ctx context.Context, resumeText string, interviewer
 			},
 		},
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONObject: ptrJSONObjectFormat(),
+			OfJSONObject: aicore.PtrJSONObjectFormat(),
 		},
 	}
 
@@ -189,7 +184,7 @@ func (g *ResumeGrader) Grade(ctx context.Context, resumeText string, interviewer
 	raw := strings.TrimSpace(resp.Choices[0].Message.Content)
 
 	// 提取 JSON 对象
-	raw = extractJSONObject(raw)
+	raw = aicore.ExtractJSONObject(raw)
 
 	// 解析 JSON 对象
 	var parsed rawResumeAnalysis
@@ -220,24 +215,4 @@ func (g *ResumeGrader) Grade(ctx context.Context, resumeText string, interviewer
 		Strengths:       st,
 		SuggestionsJSON: string(sugBytes),
 	}, nil
-}
-
-// 创建 JSON 对象响应格式
-func ptrJSONObjectFormat() *shared.ResponseFormatJSONObjectParam {
-	// 比较早的模型不支持 JSON Schema，所以需要手动创建 JSON 对象响应格式
-	rf := shared.NewResponseFormatJSONObjectParam()
-	// 对支持新能力的模型，更推荐用 json_schema（结构化输出 / Structured Outputs）。
-	return &rf
-}
-
-// 提取 JSON 对象
-func extractJSONObject(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.Index(s, "{"); i > 0 {
-		s = s[i:]
-	}
-	if j := strings.LastIndex(s, "}"); j >= 0 && j < len(s)-1 {
-		s = s[:j+1]
-	}
-	return s
 }

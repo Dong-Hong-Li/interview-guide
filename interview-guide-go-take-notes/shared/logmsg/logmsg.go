@@ -72,6 +72,19 @@ const (
 	MsgKnowledgeBaseRevectorizeOK = "知识库重向量化：已入队"
 	// MsgKnowledgeBaseRevectorizeFailed 抽取为空、置 PENDING、或 XADD 失败（reason：extract_empty | update_pending | enqueue）。
 	MsgKnowledgeBaseRevectorizeFailed = "知识库重向量化：失败"
+	// MsgKnowledgeBaseQueryBegin 即将对问题做 Embedding 并检索分块（参数含 kbIds、问题长度）。
+	MsgKnowledgeBaseQueryBegin = "知识库问答：开始检索"
+	// MsgKnowledgeBaseQueryOK 非流式一次生成完成（含 primaryKbId）。
+	MsgKnowledgeBaseQueryOK = "知识库问答：完成"
+	// MsgKnowledgeBaseQueryFailed Chat Completions 失败或上游网关错误。
+	MsgKnowledgeBaseQueryFailed = "知识库问答：失败"
+
+	// MsgRagChatStreamOK RAG 会话流式一轮结束（USER+ASSISTANT 已落库）。
+	MsgRagChatStreamOK = "RAG 对话流式：本轮完成"
+	// MsgRagChatStreamFailed 向量检索或 Chat 流失败（USER 消息可能已写入）。
+	MsgRagChatStreamFailed = "RAG 对话流式：失败"
+	// MsgRagChatPersistAssistantFailed 助手消息落库失败（输出可能已送达客户端）。
+	MsgRagChatPersistAssistantFailed = "RAG 对话：助手消息落库失败"
 
 	// MsgKnowledgeVectorizeEmbedOK 网关 Embeddings 已全部成功，尚未写 PG（接着 SaveChunks）。
 	MsgKnowledgeVectorizeEmbedOK = "知识库向量化：Embedding 网关调用成功"

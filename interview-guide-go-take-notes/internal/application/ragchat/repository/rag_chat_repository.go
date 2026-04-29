@@ -25,6 +25,10 @@ type RagChatRepository interface {
 	ListMessagesBySessionID(ctx context.Context, sessionID int64) ([]RagMessageRow, error)
 	// ListKnowledgeBaseItemsForSession 详情区「已选知识库」完整元数据。
 	ListKnowledgeBaseItemsForSession(ctx context.Context, sessionID int64) ([]kbresults.KnowledgeBaseListItem, error)
+	// ListKnowledgeBaseIDsForSession 会话绑定的知识库主键（升序）；无绑定返回空切片。
+	ListKnowledgeBaseIDsForSession(ctx context.Context, sessionID int64) ([]int64, error)
+	// InsertChatMessage 追加一条消息并 session.message_count+1、updated_at 刷新；typ 为 USER / ASSISTANT。
+	InsertChatMessage(ctx context.Context, sessionID int64, typ string, content string) error
 	// ReplaceSessionKnowledgeBases 先删后插。
 	ReplaceSessionKnowledgeBases(ctx context.Context, sessionID int64, kbIDs []int64) error
 	UpdateSessionTitle(ctx context.Context, sessionID int64, title string) error

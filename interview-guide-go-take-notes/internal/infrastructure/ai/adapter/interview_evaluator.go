@@ -1,23 +1,24 @@
-package ai
+package adapter
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"interview-guide-go/shared/logmsg"
 	"io/fs"
 	"sort"
 	"strings"
 	"sync"
 	"unicode/utf8"
 
+	aicore "interview-guide-go/internal/infrastructure/ai"
+	"interview-guide-go/internal/application/interview/model/results"
+	"interview-guide-go/internal/infrastructure/ai/promptprofile"
+	"interview-guide-go/shared/logmsg"
+
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
 	constpkg "github.com/openai/openai-go/shared/constant"
 	"go.uber.org/zap"
-
-	"interview-guide-go/internal/application/interview/model/results"
-	"interview-guide-go/internal/infrastructure/ai/promptprofile"
 )
 
 // 与 Java AnswerEvaluationService.EvaluationReportDTO + BeanOutputConverter 对齐的批次 JSON 契约（非完整 InterviewReport）。
@@ -105,7 +106,7 @@ func loadInterviewEvalPrompts(interviewerRole string) (cachedInterviewEvalPrompt
 	}
 	read := func(name string) (string, error) {
 		path := fmt.Sprintf("prompts/interview-eval/%s/%s", sub, name)
-		b, err := fs.ReadFile(promptsRoot, path)
+		b, err := fs.ReadFile(aicore.PromptsRoot, path)
 		if err != nil {
 			return "", fmt.Errorf("read %s: %w", path, err)
 		}
@@ -258,7 +259,7 @@ func (e *InterviewEvaluator) evaluateBatch(ctx context.Context, sessionPublicID,
 	if err != nil {
 		return empty, fmt.Errorf("batch [%d,%d): %w", start, end, err)
 	}
-	raw = extractJSONObject(raw)
+	raw = aicore.ExtractJSONObject(raw)
 	var rep interviewBatchEvalReport
 	if err := json.Unmarshal([]byte(raw), &rep); err != nil {
 		return empty, fmt.Errorf("batch [%d,%d) parse: %w", start, end, err)
@@ -289,7 +290,7 @@ func (e *InterviewEvaluator) chatJSON(ctx context.Context, system, user string) 
 			},
 		},
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONObject: ptrJSONObjectFormat(),
+			OfJSONObject: aicore.PtrJSONObjectFormat(),
 		},
 	}
 	if e.temperature > 0 {
@@ -394,7 +395,7 @@ func (e *InterviewEvaluator) summarizeBatchResults(
 	if err != nil {
 		return interviewFinalSummaryDTO{}, err
 	}
-	raw = extractJSONObject(raw)
+	raw = aicore.ExtractJSONObject(raw)
 	var parsed interviewFinalSummaryDTO
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return interviewFinalSummaryDTO{}, err

@@ -26,6 +26,7 @@ func NewKnowledgeBaseMapper(db *gorm.DB) *KnowledgeBaseMapper {
 
 var _ kbrepo.KnowledgeBaseWriter = (*KnowledgeBaseMapper)(nil)
 var _ kbrepo.KnowledgeBaseReader = (*KnowledgeBaseMapper)(nil)
+var _ kbrepo.KnowledgeVectorSearcher = (*KnowledgeBaseMapper)(nil)
 
 // GetKnowledgeBaseFileRef 取存储 key 与元数据；不存在返回 (nil, nil)。
 func (m *KnowledgeBaseMapper) GetKnowledgeBaseFileRef(ctx context.Context, id int64) (*kbrepo.KnowledgeBaseFileRef, error) {
@@ -423,4 +424,58 @@ func knowledgeBaseRowToListItem(row *grommodel.KnowledgeBase) results.KnowledgeB
 		VectorError:      ve,
 		ChunkCount:       row.ChunkCount,
 	}
+}
+
+// SearchSimilarChunks 实现 repository.KnowledgeVectorSearcher：按余弦距离在选定知识库分块中取 Top‑limit。
+func (m *KnowledgeBaseMapper) SearchSimilarChunks(ctx context.Context, kbIDs []int64, queryEmbedding []float32, limit int) ([]kbrepo.KnowledgeChunkHit, error) {
+	if m == nil || m.db == nil || len(kbIDs) == 0 || limit < 1 {
+		return nil, nil
+	}
+	if len(queryEmbedding) == 0 {
+		return nil, errors.New("empty embedding")
+	}
+	vec := pgvector.NewVector(queryEmbedding)
+	var rows []struct {
+		KnowledgeBaseID int64   `gorm:"column:knowledge_base_id"`
+		Content         string  `gorm:"column:content"`
+		Distance        float64 `gorm:"column:distance"`
+	}
+	err := m.db.WithContext(ctx).Raw(`
+SELECT knowledge_base_id, content,
+       (embedding <=> ?::vector) AS distance
+FROM knowledge_base_chunks
+WHERE knowledge_base_id IN ?
+ORDER BY embedding <=> ?::vector
+LIMIT ?
+`, vec, kbIDs, vec, limit).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]kbrepo.KnowledgeChunkHit, 0, len(rows))
+	for i := range rows {
+		out = append(out, kbrepo.KnowledgeChunkHit{
+			KnowledgeBaseID: rows[i].KnowledgeBaseID,
+			Content:         rows[i].Content,
+			Distance:        rows[i].Distance,
+		})
+	}
+	return out, nil
+}
+
+// IncrementQuestionCounts 将所列知识库的 question_count 各 +1（与 Java updateQuestionCounts 对齐）。
+func (m *KnowledgeBaseMapper) IncrementQuestionCounts(ctx context.Context, ids []int64) error {
+	if m == nil || m.db == nil || len(ids) == 0 {
+		return nil
+	}
+	for _, id := range ids {
+		if id < 1 {
+			continue
+		}
+		if err := m.db.WithContext(ctx).Model(&grommodel.KnowledgeBase{}).
+			Where("id = ?", id).
+			UpdateColumn("question_count", gorm.Expr("question_count + ?", 1)).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

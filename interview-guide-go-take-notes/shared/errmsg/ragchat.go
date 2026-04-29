@@ -11,4 +11,9 @@ const (
 	RagChatUpdateTitleSuccess   = "标题已更新"
 	RagChatUpdateKBsSuccess     = "知识库已更新"
 	RagChatTogglePinSuccess     = "置顶状态已更新"
+
+	RagChatStreamServiceNil        = "RAG 流式对话服务未配置"
+	RagChatSessionNoKnowledgeBases = "当前会话未绑定知识库，无法对话"
+	RagChatInvalidSessionPathID    = "无效的会话编号"
+	RagChatQuestionEmpty           = "消息内容不能为空"
 )

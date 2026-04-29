@@ -64,6 +64,8 @@ type KnowledgeBaseWriter interface {
 	DeleteKnowledgeBaseByID(ctx context.Context, id int64) error
 	// UpdateKnowledgeBaseCategory 更新 category 列；空串表示未分类。未影响行时返回 ErrKnowledgeBaseUpdateNoRow。
 	UpdateKnowledgeBaseCategory(ctx context.Context, id int64, category string) error
+	// IncrementQuestionCounts 每条知识库 question_count+1（与 Java countService.updateQuestionCounts 语义一致）。
+	IncrementQuestionCounts(ctx context.Context, ids []int64) error
 }
 
 // ObjectStoragePort 复用简历对象存储端口，上传/预签名与 bucket 约定一致。

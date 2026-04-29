@@ -1,8 +1,7 @@
-package ai
+package adapter
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -11,15 +10,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/shared"
-	constpkg "github.com/openai/openai-go/shared/constant"
-	"go.uber.org/zap"
-
+	aicore "interview-guide-go/internal/infrastructure/ai"
 	res "interview-guide-go/internal/application/interview/model/results"
 	"interview-guide-go/internal/infrastructure/ai/promptprofile"
 	ityp "interview-guide-go/shared/interview"
 	"interview-guide-go/shared/logmsg"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/shared"
+	constpkg "github.com/openai/openai-go/shared/constant"
+	"go.uber.org/zap"
 )
 
 type llmQuestionItem struct {
@@ -36,9 +36,6 @@ type llmQuestionItem struct {
 type llmQuestionList struct {
 	Questions []llmQuestionItem `json:"questions"`
 }
-
-//go:embed prompts/interview
-var interviewPromptsFS embed.FS
 
 var interviewPromptCache sync.Map // key "<subdir>/<name>" -> string
 
@@ -157,10 +154,10 @@ func loadInterviewPrompt(interviewerRole, name string) (string, error) {
 	if v, ok := interviewPromptCache.Load(cacheKey); ok {
 		return v.(string), nil
 	}
-	b, err := fs.ReadFile(interviewPromptsFS, "prompts/interview/"+subdir+"/"+name)
+	b, err := fs.ReadFile(aicore.PromptsRoot, "prompts/interview/"+subdir+"/"+name)
 	if err != nil {
 		// fallback to the legacy flat path to tolerate partial upgrades
-		b, err = fs.ReadFile(interviewPromptsFS, "prompts/interview/"+name)
+		b, err = fs.ReadFile(aicore.PromptsRoot, "prompts/interview/"+name)
 		if err != nil {
 			return "", err
 		}
@@ -272,7 +269,7 @@ func (g *InterviewQuestionGenerator) generateViaLLM(ctx context.Context, resumeT
 			},
 		},
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONObject: ptrJSONObjectFormat(),
+			OfJSONObject: aicore.PtrJSONObjectFormat(),
 		},
 	}
 	if g.temperature > 0 {
@@ -294,7 +291,7 @@ func (g *InterviewQuestionGenerator) generateViaLLM(ctx context.Context, resumeT
 	// 提取 JSON 对象
 	raw := strings.TrimSpace(resp.Choices[0].Message.Content)
 	// 提取 JSON 对象
-	raw = extractJSONObject(raw)
+	raw = aicore.ExtractJSONObject(raw)
 	// 解析 JSON 对象
 	var parsed llmQuestionList
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {

@@ -97,7 +97,7 @@ func initializeInterviewController(lg *zap.Logger, db *gorm.DB, rdb *redis.Clien
 }
 
 // initializeKnowledgeBaseController 知识库域（/api/knowledgebase/*），与 initializeResumeController 同形参以复用 StartDeps 注入。
-func initializeKnowledgeBaseController(cfg *config.Config, lg *zap.Logger, db *gorm.DB, rdb *redis.Client, storeSvc *storage.StorageService) *controller3.KnowledgeBaseController {
+func initializeKnowledgeBaseController(cfg *config.Config, lg *zap.Logger, db *gorm.DB, rdb *redis.Client, storeSvc *storage.StorageService, oa *ai.OpenAIService) *controller3.KnowledgeBaseController {
 	objectStoragePort := adapter.NewObjectStorageAdapter(storeSvc)
 	knowledgeBaseMapper := mapper.NewKnowledgeBaseMapper(db)
 	vectorizeTaskPublisher := adapter3.NewKnowledgeVectorizePublisher(rdb, lg)
@@ -108,6 +108,10 @@ func initializeKnowledgeBaseController(cfg *config.Config, lg *zap.Logger, db *g
 	downloadKnowledgeBaseService := service3.NewDownloadKnowledgeBaseService(knowledgeBaseMapper, objectStoragePort)
 	updateKnowledgeBaseCategoryService := service3.NewUpdateKnowledgeBaseCategoryService(knowledgeBaseMapper, knowledgeBaseMapper)
 	revectorizeKnowledgeBaseService := service3.NewRevectorizeKnowledgeBaseService(lg, knowledgeBaseMapper, objectStoragePort, knowledgeBaseMapper, vectorizeTaskPublisher, knowledgeTextExtractor)
+	knowledgeTextEmbedder := provideKnowledgeBaseEmbedder(cfg, lg, oa)
+	knowledgeBaseQueryChat := provideKnowledgeBaseQueryChat(cfg, oa)
+	int2 := provideKBQueryMaxQuestionRunes(cfg)
+	knowledgeBaseQueryService := service3.NewKnowledgeBaseQueryService(lg, knowledgeTextEmbedder, knowledgeBaseMapper, knowledgeBaseMapper, knowledgeBaseMapper, knowledgeBaseQueryChat, int2)
 	knowledgeBaseController := &controller3.KnowledgeBaseController{
 		UploadService:         uploadKnowledgeBaseService,
 		ListService:           knowledgeBaseListService,
@@ -115,16 +119,24 @@ func initializeKnowledgeBaseController(cfg *config.Config, lg *zap.Logger, db *g
 		DownloadService:       downloadKnowledgeBaseService,
 		UpdateCategoryService: updateKnowledgeBaseCategoryService,
 		RevectorizeService:    revectorizeKnowledgeBaseService,
+		QueryService:          knowledgeBaseQueryService,
 	}
 	return knowledgeBaseController
 }
 
-// initializeRagChatController RAG 对话域（/api/rag-chat/*），仅依赖 Postgres。
-func initializeRagChatController(db *gorm.DB) *controller4.RagChatController {
+// initializeRagChatController RAG 对话域（/api/rag-chat/*），依赖 Postgres + OpenAI（KB 问答链）。
+func initializeRagChatController(cfg *config.Config, lg *zap.Logger, db *gorm.DB, oa *ai.OpenAIService) *controller4.RagChatController {
 	ragChatMapper := mapper.NewRagChatMapper(db)
 	ragChatSessionService := service4.NewRagChatSessionService(ragChatMapper)
+	knowledgeTextEmbedder := provideKnowledgeBaseEmbedder(cfg, lg, oa)
+	knowledgeBaseMapper := mapper.NewKnowledgeBaseMapper(db)
+	knowledgeBaseQueryChat := provideKnowledgeBaseQueryChat(cfg, oa)
+	int2 := provideKBQueryMaxQuestionRunes(cfg)
+	knowledgeBaseQueryService := service3.NewKnowledgeBaseQueryService(lg, knowledgeTextEmbedder, knowledgeBaseMapper, knowledgeBaseMapper, knowledgeBaseMapper, knowledgeBaseQueryChat, int2)
+	ragChatStreamService := service4.NewRagChatStreamService(lg, ragChatMapper, knowledgeBaseQueryService)
 	ragChatController := &controller4.RagChatController{
 		SessionService: ragChatSessionService,
+		StreamService:  ragChatStreamService,
 	}
 	return ragChatController
 }
@@ -141,11 +153,17 @@ var interviewModuleSet = wire.NewSet(mapper.NewResumeMapper, wire.Bind(new(repos
 	provideInterviewQuestionGenerator, service2.NewCreateInterviewService, service2.NewUnfinishedSessionService, service2.NewCurrentQuestionService, service2.NewSubmitAnswerService, service2.NewListInterviewSessionsService, service2.NewReportService, service2.NewGetInterviewDetailService, service2.NewGetSessionService, service2.NewCompleteSessionService, service2.NewDeleteInterviewService, wire.Struct(new(controller2.InterviewController), "*"),
 )
 
-// 知识库：上传（存储 + 文本抽取 + 落库 + 向量化入队）、下载、重向量化等；query/query/stream 仍占位。
-var knowledgeModuleSet = wire.NewSet(mapper.NewKnowledgeBaseMapper, wire.Bind(new(repository3.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)), wire.Bind(new(repository3.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)), adapter.NewObjectStorageAdapter, adapter2.NewKnowledgeTextExtractor, adapter3.NewKnowledgeVectorizePublisher, service3.NewUploadKnowledgeBaseService, service3.NewKnowledgeBaseListService, service3.NewDeleteKnowledgeBaseService, service3.NewDownloadKnowledgeBaseService, service3.NewUpdateKnowledgeBaseCategoryService, service3.NewRevectorizeKnowledgeBaseService, wire.Struct(new(controller3.KnowledgeBaseController), "*"))
+// 知识库：上传、列表、向量检索问答（query/query/stream）、下载、重向量化等。
+var knowledgeModuleSet = wire.NewSet(mapper.NewKnowledgeBaseMapper, wire.Bind(new(repository3.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)), wire.Bind(new(repository3.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)), wire.Bind(new(repository3.KnowledgeVectorSearcher), new(*mapper.KnowledgeBaseMapper)), adapter.NewObjectStorageAdapter, adapter2.NewKnowledgeTextExtractor, adapter3.NewKnowledgeVectorizePublisher, provideKnowledgeBaseEmbedder,
+	provideKnowledgeBaseQueryChat,
+	provideKBQueryMaxQuestionRunes, service3.NewUploadKnowledgeBaseService, service3.NewKnowledgeBaseListService, service3.NewDeleteKnowledgeBaseService, service3.NewDownloadKnowledgeBaseService, service3.NewUpdateKnowledgeBaseCategoryService, service3.NewRevectorizeKnowledgeBaseService, service3.NewKnowledgeBaseQueryService, wire.Struct(new(controller3.KnowledgeBaseController), "*"),
+)
 
-// RAG 对话：会话 CRUD（流式发消息仍占位时由控制器单独返回 501）。
-var ragModuleSet = wire.NewSet(mapper.NewRagChatMapper, wire.Bind(new(repository4.RagChatRepository), new(*mapper.RagChatMapper)), service4.NewRagChatSessionService, wire.Struct(new(controller4.RagChatController), "*"))
+// RAG 对话：会话 CRUD + messages/stream（复用 KnowledgeBaseQueryService RAG 链）。
+var ragModuleSet = wire.NewSet(mapper.NewKnowledgeBaseMapper, wire.Bind(new(repository3.KnowledgeBaseWriter), new(*mapper.KnowledgeBaseMapper)), wire.Bind(new(repository3.KnowledgeBaseReader), new(*mapper.KnowledgeBaseMapper)), wire.Bind(new(repository3.KnowledgeVectorSearcher), new(*mapper.KnowledgeBaseMapper)), provideKnowledgeBaseEmbedder,
+	provideKnowledgeBaseQueryChat,
+	provideKBQueryMaxQuestionRunes, service3.NewKnowledgeBaseQueryService, mapper.NewRagChatMapper, wire.Bind(new(repository4.RagChatRepository), new(*mapper.RagChatMapper)), service4.NewRagChatSessionService, service4.NewRagChatStreamService, wire.Struct(new(controller4.RagChatController), "*"),
+)
 
 // provideMaxResumeUploadBytes 抽取 cfg 字段给 ResumeUploadService 用，避免 wire 直接把 cfg.Xxx 当 int64 provider。
 func provideMaxResumeUploadBytes(cfg *config.Config) int64 {
@@ -163,4 +181,30 @@ func provideInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Config,
 		panic("interview-guide-go: OpenAIService required for InterviewQuestionGenerator")
 	}
 	return adapter4.NewOpenAIInterviewQuestionGenerator(oa, cfg, lg)
+}
+
+// provideKnowledgeBaseEmbedder 与向量化消费者同源：KB_EMBEDDING_* 网关 + OpenAIKnowledgeEmbedder。
+func provideKnowledgeBaseEmbedder(cfg *config.Config, lg *zap.Logger, oa *ai.OpenAIService) repository3.KnowledgeTextEmbedder {
+	c, err := ai.EmbeddingHTTPClient(cfg, oa)
+	if err != nil {
+		panic("interview-guide-go: EmbeddingHTTPClient: " + err.Error())
+	}
+	return adapter4.NewOpenAIKnowledgeEmbedder(c, cfg.Openai, lg)
+}
+
+// provideKnowledgeBaseQueryChat 主对话网关 Chat Completions（OPENAI_*），供 query / query/stream 生成答案。
+func provideKnowledgeBaseQueryChat(cfg *config.Config, oa *ai.OpenAIService) repository3.KnowledgeBaseQueryChat {
+	if cfg == nil || oa == nil {
+		panic("interview-guide-go: KnowledgeBaseQueryChat prerequisites")
+	}
+	o := cfg.Openai
+	return adapter4.NewKnowledgeBaseQueryChatAdapter(oa, o.AIModel, o.ResumeAIMaxCompletionTokens, o.ResumeAITemperature)
+}
+
+// provideKBQueryMaxQuestionRunes 抽 cfg，供注入 KnowledgeBaseQueryService（问题过长按 rune 截断）。
+func provideKBQueryMaxQuestionRunes(cfg *config.Config) int {
+	if cfg == nil {
+		return 0
+	}
+	return cfg.Openai.ResumeAIMaxRunes
 }

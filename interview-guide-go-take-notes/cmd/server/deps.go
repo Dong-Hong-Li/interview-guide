@@ -7,6 +7,7 @@ import (
 	"interview-guide-go/internal/application/resume/repository"
 	"interview-guide-go/internal/config"
 	"interview-guide-go/internal/infrastructure/ai"
+	aiadapter "interview-guide-go/internal/infrastructure/ai/adapter"
 	"interview-guide-go/internal/infrastructure/postgres"
 	"interview-guide-go/internal/infrastructure/postgres/mapper"
 	"interview-guide-go/internal/infrastructure/redis"
@@ -33,13 +34,14 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 		lg.Fatal(logmsg.MsgServerConfigNilFatal)
 	}
 
-	// ── 基础设施：对象存储 / Postgres / Redis / OpenAI 客户端 ──
+	// ── 基础设施：对象存储 / Postgres / Redis / OpenAI ──
 	storageService, err := storage.StartStorageService(ctx, cfg)
 	if err != nil {
 		lg.Error(logmsg.MsgStorageStartFailed, zap.Error(err))
 		return nil, cleanup
 	}
 
+	// ── 数据库：Postgres ──
 	postgresService, err := postgres.StartPostgresService(ctx, cfg)
 	if err != nil {
 		lg.Error(logmsg.MsgPostgresStartFailed, zap.Error(err))
@@ -47,6 +49,7 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	}
 	cleanups = append(cleanups, func() { _ = postgresService.Close() })
 
+	// ── 缓存：Redis ──
 	redisService, err := redis.StartRedisService(ctx, cfg)
 	if err != nil {
 		lg.Error(logmsg.MsgRedisStartFailed, zap.Error(err))
@@ -54,6 +57,7 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	}
 	cleanups = append(cleanups, func() { _ = redisService.Close() })
 
+	// ── 大语言模型：简历/面试/知识库/RAG 对话 ──
 	oaSvc, err := ai.NewOpenAIService(ctx, cfg)
 	if err != nil {
 		lg.Error(logmsg.MsgOpenAIStartFailed, zap.Error(err))
@@ -66,8 +70,11 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	// ── 面试模块：题目生成器、CreateInterview 用例、控制器由 wire 生成的 injector 装配 ──
 	interviewController := initializeInterviewController(lg, postgresService.DB, redisService.Client, oaSvc, cfg)
 
-	// ── 知识库：上传（存储/落库/向量化入队）由 wire 装配，其余端点多为 501 占位 ──
-	knowledgeBaseController := initializeKnowledgeBaseController(cfg, lg, postgresService.DB, redisService.Client, storageService)
+	// ── 知识库：上传（存储/落库/向量化入队）由 wire 装配，
+	knowledgeBaseController := initializeKnowledgeBaseController(cfg, lg, postgresService.DB, redisService.Client, storageService, oaSvc)
+
+	// ── RAG 对话：会话 CRUD + messages/stream（复用 KnowledgeBaseQueryService RAG 链）。
+	ragChatController := initializeRagChatController(cfg, lg, postgresService.DB, oaSvc)
 
 	// ── 异步：简历分析 Redis Stream 消费者
 	startResumeAnalyzeConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, mapper.NewResumeMapper(postgresService.DB))
@@ -82,7 +89,7 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 		resumeController,
 		interviewController,
 		knowledgeBaseController,
-		initializeRagChatController(postgresService.DB),
+		ragChatController,
 	}, cleanup
 }
 
@@ -104,7 +111,7 @@ func startResumeAnalyzeConsumerIfReady(
 	}
 	o := cfg.Openai
 	// 简历分析器
-	grader := ai.NewResumeGrader(
+	grader := aiadapter.NewResumeGrader(
 		oaSvc.Client(), o.AIModel,
 		o.ResumeAIMaxRunes, o.ResumeAIMaxCompletionTokens, o.ResumeAITemperature, lg,
 	)
@@ -138,7 +145,7 @@ func startInterviewEvaluateConsumerIfReady(
 	// 评估处理器
 	proc := service.NewEvaluateProcessor(im, sc, rm)
 	// 面试评估器
-	ivEval, err := ai.NewInterviewEvaluator(oaSvc.Client(), o.AIModel, o.ResumeAIMaxRunes, o.ResumeAIMaxCompletionTokens, o.ResumeAITemperature, 8, lg)
+	ivEval, err := aiadapter.NewInterviewEvaluator(oaSvc.Client(), o.AIModel, o.ResumeAIMaxRunes, o.ResumeAIMaxCompletionTokens, o.ResumeAITemperature, 8, lg)
 	if err != nil {
 		lg.Fatal(logmsg.MsgInterviewEvaluatePromptsLoad, zap.Error(err))
 	}
@@ -167,7 +174,7 @@ func startKnowledgeVectorizeConsumerIfReady(
 	if err != nil {
 		lg.Fatal(logmsg.MsgKnowledgeEmbeddingClientFatal, zap.Error(err))
 	}
-	embedder := ai.NewOpenAIKnowledgeEmbedder(embedHTTP, cfg.Openai, lg)
-	chunker := ai.NewOpenAIKnowledgeTextChunker(oaSvc.Client(), cfg, lg)
+	embedder := aiadapter.NewOpenAIKnowledgeEmbedder(embedHTTP, cfg.Openai, lg)
+	chunker := aiadapter.NewOpenAIKnowledgeTextChunker(oaSvc.Client(), cfg, lg)
 	redisstream.StartKnowledgeVectorizeConsumer(ctx, redisService.Client, mapper.NewKnowledgeBaseMapper(pg.DB), chunker, embedder, lg)
 }

@@ -206,6 +206,59 @@ func (m *RagChatMapper) ListKnowledgeBaseItemsForSession(ctx context.Context, se
 	return out, nil
 }
 
+// ListKnowledgeBaseIDsForSession 关联表中的 knowledge_base_id（升序）。
+func (m *RagChatMapper) ListKnowledgeBaseIDsForSession(ctx context.Context, sessionID int64) ([]int64, error) {
+	if m == nil || m.db == nil || sessionID < 1 {
+		return nil, errors.New("invalid session id")
+	}
+	var ids []int64
+	err := m.db.WithContext(ctx).Model(&grommodel.RagSessionKnowledgeBase{}).
+		Where("session_id = ?", sessionID).
+		Order("knowledge_base_id ASC").
+		Pluck("knowledge_base_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	if ids == nil {
+		return []int64{}, nil
+	}
+	return ids, nil
+}
+
+// InsertChatMessage 追加一条消息并更新会话 message_count / updated_at。
+func (m *RagChatMapper) InsertChatMessage(ctx context.Context, sessionID int64, typ string, content string) error {
+	if m == nil || m.db == nil || sessionID < 1 {
+		return errors.New("invalid session id")
+	}
+	t := strings.TrimSpace(typ)
+	if t == "" {
+		return errors.New("empty message type")
+	}
+	t = strings.ToUpper(t)
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var maxOrder int
+		if err := tx.Raw(`SELECT COALESCE(MAX(message_order), 0) FROM rag_chat_messages WHERE session_id = ?`, sessionID).Scan(&maxOrder).Error; err != nil {
+			return err
+		}
+		next := maxOrder + 1
+		msg := grommodel.RagChatMessage{
+			SessionID:    sessionID,
+			Type:         t,
+			Content:      content,
+			MessageOrder: next,
+			Completed:    true,
+		}
+		if err := tx.Create(&msg).Error; err != nil {
+			return err
+		}
+		return tx.Model(&grommodel.RagChatSession{}).Where("id = ?", sessionID).
+			Updates(map[string]interface{}{
+				"message_count": gorm.Expr("message_count + ?", 1),
+				"updated_at":    time.Now(),
+			}).Error
+	})
+}
+
 // ReplaceSessionKnowledgeBases 替换会话绑定的知识库 id 集合（先全删后插）。
 func (m *RagChatMapper) ReplaceSessionKnowledgeBases(ctx context.Context, sessionID int64, kbIDs []int64) error {
 	if m == nil || m.db == nil || sessionID < 1 {

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"interview-guide-go/internal/application/resume/repository"
-	"interview-guide-go/internal/infrastructure/ai"
+	aiadapter "interview-guide-go/internal/infrastructure/ai/adapter"
 	"interview-guide-go/internal/infrastructure/ai/promptprofile"
 	"interview-guide-go/shared/logmsg"
 	sharedresume "interview-guide-go/shared/resume"
@@ -25,7 +25,7 @@ import (
 const resumeAnalyzeMaxConcurrent = 10
 
 // StartResumeAnalyzeConsumer 启动简历分析消费者：XREADGROUP 读流，调用 grader.Grade，经 ResumeWriter 写库。
-func StartResumeAnalyzeConsumer(ctx context.Context, rdb *redis.Client, w repository.ResumeWriter, grader *ai.ResumeGrader, lg *zap.Logger) {
+func StartResumeAnalyzeConsumer(ctx context.Context, rdb *redis.Client, w repository.ResumeWriter, grader *aiadapter.ResumeGrader, lg *zap.Logger) {
 	if rdb == nil || w == nil || grader == nil {
 		return
 	}
@@ -34,7 +34,7 @@ func StartResumeAnalyzeConsumer(ctx context.Context, rdb *redis.Client, w reposi
 }
 
 // 运行简历分析消费者
-func runResumeAnalyzeConsumer(ctx context.Context, rdb *redis.Client, w repository.ResumeWriter, grader *ai.ResumeGrader, lg *zap.Logger, consumer string) {
+func runResumeAnalyzeConsumer(ctx context.Context, rdb *redis.Client, w repository.ResumeWriter, grader *aiadapter.ResumeGrader, lg *zap.Logger, consumer string) {
 	// 创建消费者组
 	if err := ensureResumeAnalyzeGroup(ctx, rdb); err != nil {
 		lg.Error(logmsg.MsgResumeAnalyzeCreateConsumerGroup, zap.Error(err))
@@ -123,7 +123,7 @@ func ensureResumeAnalyzeGroup(ctx context.Context, rdb *redis.Client) error {
 // grader ResumeGrader 简历分析器
 // lg 日志记录器
 // msg 简历分析队列消息
-func processResumeAnalyzeMessage(ctx context.Context, rdb *redis.Client, resumeWriter repository.ResumeWriter, grader *ai.ResumeGrader, lg *zap.Logger, msg redis.XMessage) {
+func processResumeAnalyzeMessage(ctx context.Context, rdb *redis.Client, resumeWriter repository.ResumeWriter, grader *aiadapter.ResumeGrader, lg *zap.Logger, msg redis.XMessage) {
 	// 1 获取简历ID和内容
 	resumeIDStr, _ := msg.Values[streamkey.StreamFieldResumeID].(string)
 	if resumeIDStr == "" {

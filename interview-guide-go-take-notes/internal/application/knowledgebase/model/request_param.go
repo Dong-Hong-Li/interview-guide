@@ -28,8 +28,11 @@ type KBSearchReq struct {
 	Keyword string `query:"keyword"`
 }
 
-// KBQueryReq 知识库 RAG 查询（JSON body）。占位 501 阶段无字段。
-type KBQueryReq struct{}
+// KBQueryReq POST /api/knowledgebase/query 与 /query/stream 共用 JSON body（与前端 QueryRequest 对齐）。
+type KBQueryReq struct {
+	KnowledgeBaseIDs []int64 `json:"knowledgeBaseIds" validate:"required"`
+	Question         string  `json:"question" validate:"required"`
+}
 
 // KBUpdateCategoryReq 更新知识库分类（JSON body + path）。
 // PUT /api/knowledgebase/{id}/category

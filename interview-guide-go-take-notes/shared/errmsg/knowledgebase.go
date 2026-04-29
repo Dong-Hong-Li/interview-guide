@@ -23,6 +23,17 @@ const (
 	KnowledgeBaseChunkAIEmptyChunks           = "AI 分片后无有效正文块（可能全部为异常摘录）"
 	KnowledgeBaseEmbeddingCountMismatch       = "向量嵌入返回条数与输入不一致"
 	KnowledgeBaseChunkEmbeddingDimMismatch    = "向量嵌入维度与数据库表不一致"
+
+	KnowledgeBaseQueryServiceNil           = "知识库问答服务未配置"
+	// KnowledgeBaseQueryDepsNil Service 内部 reader/searcher/writer/chat 等未注入完整。
+	KnowledgeBaseQueryDepsNil              = "知识库问答依赖未配置"
+	KnowledgeBaseQueryEmbedderNil          = "知识库向量嵌入客户端未配置"
+	KnowledgeBaseQueryChatNil              = "知识库问答模型客户端未配置"
+	KnowledgeBaseQueryQuestionEmpty        = "问题不能为空"
+	KnowledgeBaseQueryKnowledgeBaseIDsEmpty = "至少选择一个知识库"
+	KnowledgeBaseVectorNotReadyForQuery    = "所选知识库尚未完成向量化或不可用，请稍后再试"
+	// KnowledgeBaseQueryNoHitResponse 检索无有效分块或与阈值不匹配时的固定答复（与 Java NO_RESULT_RESPONSE 语义对齐）。
+	KnowledgeBaseQueryNoHitResponse = "抱歉，在选定的知识库中未检索到相关信息。请换一个更具体的关键词或补充上下文后再试。"
 )
 
 // Embedding 调用失败前缀（写入 vector_error 时会截断总长）。
@@ -51,4 +62,6 @@ const (
 	DeleteKnowledgeBaseObjectFailed = "删除对象存储文件失败："
 	// KnowledgeBaseRevectorizeResetStatusFailed 写入 vector_status=PENDING 失败时与 err.Error() 拼接。
 	KnowledgeBaseRevectorizeResetStatusFailed = "重置向量化状态失败："
+	// KnowledgeBaseQueryFailedPrefix 调用 Chat Completions 失败时与 err.Error() 拼接。
+	KnowledgeBaseQueryFailedPrefix = "知识库问答失败："
 )

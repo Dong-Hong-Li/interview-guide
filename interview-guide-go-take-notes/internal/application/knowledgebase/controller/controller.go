@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -20,7 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// KnowledgeBaseController 知识库 HTTP 适配层；检索类 query/query/stream 仍有 501 占位。
+// KnowledgeBaseController 知识库 HTTP 适配层。
 type KnowledgeBaseController struct {
 	UploadService         *service.UploadKnowledgeBaseService
 	ListService           *service.KnowledgeBaseListService
@@ -28,6 +30,7 @@ type KnowledgeBaseController struct {
 	DownloadService       *service.DownloadKnowledgeBaseService
 	UpdateCategoryService *service.UpdateKnowledgeBaseCategoryService
 	RevectorizeService    *service.RevectorizeKnowledgeBaseService
+	QueryService          *service.KnowledgeBaseQueryService
 }
 
 // Register 将 /api/knowledgebase/* 注册到 r。
@@ -40,7 +43,7 @@ func (c *KnowledgeBaseController) Register(r chi.Router) {
 		sr.Get(PathGetUncategorized, binding.Handle(c.getUncategorized))
 		sr.Get(PathGetSearch, binding.Handle(c.search))
 		sr.Get(PathGetStats, binding.Exec(c.getStatistics))
-		sr.Post(PathPostQueryStream, binding.Handle(c.queryKnowledgeBaseStream))
+		sr.Post(PathPostQueryStream, c.handleQueryKnowledgeBaseStream)
 		sr.Post(PathPostQuery, binding.Handle(c.queryKnowledgeBase))
 		sr.Get(PathGetByIDDownload, c.handleDownloadKnowledgeBase)
 		sr.Get(PathByID, binding.Handle(c.getKnowledgeBase))
@@ -164,14 +167,103 @@ func (c *KnowledgeBaseController) search(ctx context.Context, req model.KBSearch
 	return c.ListService.Search(ctx, req.Keyword)
 }
 
-// queryKnowledgeBaseStream POST /api/knowledgebase/query/stream：对知识库做检索 + LLM 流式回答；当前 501 占位。
-func (*KnowledgeBaseController) queryKnowledgeBaseStream(_ context.Context, _ model.KBQueryReq) (any, error) {
-	return nil, notImplemented("knowledgebase.queryKnowledgeBaseStream")
+// queryKnowledgeBase POST /api/knowledgebase/query：对所选知识库做向量检索 + 一次 Chat 作答（JSON Result）。
+func (c *KnowledgeBaseController) queryKnowledgeBase(ctx context.Context, req model.KBQueryReq) (any, error) {
+	if c == nil || c.QueryService == nil {
+		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseQueryServiceNil)
+	}
+	if err := binding.Validate(&req); err != nil {
+		return nil, err
+	}
+	v, err := validateKBQueryPayload(&req)
+	if err != nil {
+		return nil, err
+	}
+	return c.QueryService.Query(ctx, v)
 }
 
-// queryKnowledgeBase POST /api/knowledgebase/query：对知识库做检索 + 非流式回答，便于联调/自动化；当前 501 占位。
-func (*KnowledgeBaseController) queryKnowledgeBase(_ context.Context, _ model.KBQueryReq) (any, error) {
-	return nil, notImplemented("knowledgebase.queryKnowledgeBase")
+// handleQueryKnowledgeBaseStream POST /api/knowledgebase/query/stream：同上链路但 SSE（text/event-stream），正文为多段 `data:` 与前端 fetch + ReadableStream 解析一致。
+func (c *KnowledgeBaseController) handleQueryKnowledgeBaseStream(w http.ResponseWriter, r *http.Request) {
+	const maxBody int64 = 4 << 20
+	if c == nil || c.QueryService == nil {
+		response.ErrJSON(w, http.StatusServiceUnavailable, errmsg.KnowledgeBaseQueryServiceNil)
+		return
+	}
+	if r.Body != nil {
+		defer r.Body.Close()
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+	var req model.KBQueryReq
+	if err := dec.Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			response.ErrJSON(w, http.StatusBadRequest, "请求体不能为空")
+			return
+		}
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			response.ErrJSON(w, http.StatusRequestEntityTooLarge, "请求体过大")
+			return
+		}
+		response.ErrJSON(w, http.StatusBadRequest, "JSON 格式无效")
+		return
+	}
+	if err := binding.Validate(&req); err != nil {
+		response.WriteErr(w, err)
+		return
+	}
+	v, err := validateKBQueryPayload(&req)
+	if err != nil {
+		response.WriteErr(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	var flushFn func()
+	if fl, ok := w.(http.Flusher); ok {
+		flushFn = func() { fl.Flush() }
+	}
+
+	err = c.QueryService.QueryStream(r.Context(), v, w, flushFn, nil)
+	if err != nil {
+		response.WriteErr(w, err)
+	}
+}
+
+// validateKBQueryPayload 去重合法 ID、规整空白后的 KBQueryReq。
+func validateKBQueryPayload(req *model.KBQueryReq) (*model.ValidatedKBQuery, error) {
+	if req == nil {
+		return nil, response.Err(http.StatusBadRequest, errmsg.KnowledgeBaseQueryKnowledgeBaseIDsEmpty)
+	}
+	ids := dedupePositiveKnowledgeBaseIDs(req.KnowledgeBaseIDs)
+	if len(ids) == 0 {
+		return nil, response.Err(http.StatusBadRequest, errmsg.KnowledgeBaseQueryKnowledgeBaseIDsEmpty)
+	}
+	q := strings.TrimSpace(req.Question)
+	if q == "" {
+		return nil, response.Err(http.StatusBadRequest, errmsg.KnowledgeBaseQueryQuestionEmpty)
+	}
+	return &model.ValidatedKBQuery{KnowledgeBaseIDs: ids, Question: q}, nil
+}
+
+func dedupePositiveKnowledgeBaseIDs(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id < 1 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // handleDownloadKnowledgeBase GET /api/knowledgebase/{id}/download：返回对象存储中的原始文件二进制（非 JSON Result）。
@@ -261,8 +353,4 @@ func (c *KnowledgeBaseController) revectorize(ctx context.Context, req model.KBI
 		return nil, response.Err(http.StatusBadRequest, "invalid knowledge base id")
 	}
 	return c.RevectorizeService.Revectorize(ctx, req.ID)
-}
-
-func notImplemented(h string) error {
-	return response.Err(http.StatusNotImplemented, errmsg.NotImplemented+": "+h)
 }

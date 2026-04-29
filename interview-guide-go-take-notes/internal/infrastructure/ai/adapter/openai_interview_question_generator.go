@@ -6,18 +6,18 @@ import (
 	res "interview-guide-go/internal/application/interview/model/results"
 	"interview-guide-go/internal/application/interview/repository"
 	"interview-guide-go/internal/config"
-	"interview-guide-go/internal/infrastructure/ai"
+	aicore "interview-guide-go/internal/infrastructure/ai"
 
 	"go.uber.org/zap"
 )
 
-// OpenAIInterviewQuestionGenerator 包装 *ai.InterviewQuestionGenerator（见 interview_questions.go），实现 repository.InterviewQuestionGenerator。
+// OpenAIInterviewQuestionGenerator 包装 *InterviewQuestionGenerator（见 interview_questions.go），实现 repository.InterviewQuestionGenerator。
 type OpenAIInterviewQuestionGenerator struct {
-	core *ai.InterviewQuestionGenerator
+	core *InterviewQuestionGenerator
 }
 
 // NewOpenAIInterviewQuestionGenerator 使用与简历 AI 相同的模型/截断/温度；followUpCount 取 1。
-func NewOpenAIInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Config, lg *zap.Logger) *OpenAIInterviewQuestionGenerator {
+func NewOpenAIInterviewQuestionGenerator(oa *aicore.OpenAIService, cfg *config.Config, lg *zap.Logger) *OpenAIInterviewQuestionGenerator {
 	if oa == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func NewOpenAIInterviewQuestionGenerator(oa *ai.OpenAIService, cfg *config.Confi
 	if mct < 2048 {
 		mct = 8192
 	}
-	core := ai.NewInterviewQuestionGenerator(
+	core := NewInterviewQuestionGenerator(
 		oa.Client(),
 		aiCfg.AIModel,
 		mr,
