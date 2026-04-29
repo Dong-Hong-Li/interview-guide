@@ -1,6 +1,6 @@
 package model
 
-// WorkerSession 供评估 Redis 消费者按对外 sessionId 加载后的会话行形态（与主项目 InterviewSession 中 Worker 所需字段子集一致）。
+// WorkerSession 评估消费者按对外 sessionId 加载会话时所需的字段子集（含内部主键，方便后续按 PK 写入）。
 type WorkerSession struct {
 	ID int64
 	// SessionID 对外的 session_id（UUID）

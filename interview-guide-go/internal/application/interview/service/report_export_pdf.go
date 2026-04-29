@@ -11,7 +11,7 @@ import (
 	"interview-guide-go/shared/response"
 )
 
-// ExportInterviewPDF 与主项目 GetReport/export 一致：需交卷完成且评估未失败；返回 PDF 字节与 Content-Disposition。
+// ExportInterviewPDF 导出面试评估 PDF：需会话已交卷且评估未失败；返回 PDF 字节与 Content-Disposition。
 func (s *ReportService) ExportInterviewPDF(ctx context.Context, sessionID string) (pdfBytes []byte, contentDisposition string, err error) {
 	if s.sessions == nil {
 		return nil, "", response.Err(http.StatusServiceUnavailable, "interview export not configured")

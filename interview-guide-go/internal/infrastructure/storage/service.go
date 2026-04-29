@@ -100,7 +100,7 @@ func (s *StorageService) PresignGetObjectURL(ctx context.Context, objectKey stri
 	return out.URL, nil
 }
 
-// GetObject 从桶中拉取对象正文；用于重分析时从 storage_key 回灌 resume_text（与 Java downloadAndParseContent 源数据一致）。
+// GetObject 从桶中拉取对象正文；用于重分析时按 storage_key 回灌 resume_text，避免再次解析 PDF。
 func (s *StorageService) GetObject(ctx context.Context, key string) ([]byte, string, error) {
 	if key == "" {
 		return nil, "", errors.New("empty object key")

@@ -19,13 +19,13 @@ type KnowledgeBaseReader interface {
 	GetKnowledgeBaseFileRef(ctx context.Context, id int64) (*KnowledgeBaseFileRef, error)
 	// GetKnowledgeBaseByID 单条详情；不存在返回 (nil, nil)。
 	GetKnowledgeBaseByID(ctx context.Context, id int64) (*results.KnowledgeBaseListItem, error)
-	// ListKnowledgeBases 与 Java listKnowledgeBases 一致：按 uploaded_at 倒序；若 vectorStatus 非 nil 则按状态过滤（大写比较）。
+	// ListKnowledgeBases 按 uploaded_at 倒序返回；若 vectorStatus 非 nil 则按状态过滤（大写比较）。
 	ListKnowledgeBases(ctx context.Context, vectorStatus *string) ([]results.KnowledgeBaseListItem, error)
-	// ListDistinctCategories 与 Java findAllCategories 一致：非空分类去重、字典序。
+	// ListDistinctCategories 返回非空分类的去重集合，按字典序排列。
 	ListDistinctCategories(ctx context.Context) ([]string, error)
-	// GetStatistics 与 Java getStatistics 一致：条数、USER 消息数、访问合计、向量化态计数。
+	// GetStatistics 返回知识库总条数、USER 消息数、访问合计、按向量化态分桶计数。
 	GetStatistics(ctx context.Context) (*results.KnowledgeBaseStats, error)
-	// SearchKnowledgeBases 与 Java searchByKeyword 一致：name / original_filename 子串匹配（PostgreSQL ILIKE），uploaded_at 倒序。
+	// SearchKnowledgeBases 对 name / original_filename 做子串模糊匹配（PostgreSQL ILIKE），uploaded_at 倒序。
 	SearchKnowledgeBases(ctx context.Context, keyword string) ([]results.KnowledgeBaseListItem, error)
 	// ListByCategory 与分类名精确匹配（TRIM 后与库内展示一致），uploaded_at 倒序。
 	ListByCategory(ctx context.Context, category string) ([]results.KnowledgeBaseListItem, error)

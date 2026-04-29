@@ -9,7 +9,7 @@ import (
 // MaxUploadBytes 常量（50MB）
 const MaxUploadBytes = 50 * 1024 * 1024
 
-// ValidateFile 与 Java FileValidationService.validateFile（知识库）一致：非空、不超过 50MB。
+// ValidateFile 校验上传文件：必须非空且不超过 50MB。
 func ValidateFile(file *multipart.FileHeader) error {
 	if file == nil {
 		return errors.New("file is nil")

@@ -152,7 +152,7 @@ func (m *InterviewMapper) GetSessionRecordForSubmit(ctx context.Context, session
 	}, nil
 }
 
-// SaveInterviewAnswer 与主项目 InterviewRepository.saveInterviewAnswer 语义一致。
+// SaveInterviewAnswer 写入或更新 interview_answers 行（按 session_id + question_index 唯一约束 upsert）。
 func (m *InterviewMapper) SaveInterviewAnswer(ctx context.Context, sessionPK int64, qIdx int, question, category, userAnswer string, score *int, feedback string) error {
 	if m.gdb == nil {
 		return errors.New("save answer: nil db")
@@ -233,7 +233,8 @@ func (m *InterviewMapper) DeleteInterviewSessionByPublicID(ctx context.Context, 
 	})
 }
 
-// GetHistoricalQuestionsByResumeID 从历史会话的 questions_json 中抽取主问题文案（去重、上限与 Java/ Go 主项目 view 包一致思路）。
+// GetHistoricalQuestionsByResumeID 从同一简历的历史会话 questions_json 中抽取主问题文案，
+// 用于差异化出题；返回结果已去重并按上限截断，避免提示词膨胀。
 func (m *InterviewMapper) GetHistoricalQuestionsByResumeID(ctx context.Context, resumeID int64) ([]string, error) {
 	if m.gdb == nil {
 		return nil, errors.New("historical questions: nil db")

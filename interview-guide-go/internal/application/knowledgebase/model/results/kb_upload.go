@@ -1,6 +1,6 @@
 package results
 
-// UploadKnowledgeBaseResponse 与 Java uploadKnowledgeBase 返回 Map 及前端 UploadKnowledgeBaseResponse 对齐。
+// UploadKnowledgeBaseResponse 知识库上传接口的响应体，含知识库元数据、对象存储引用与去重标记。
 type UploadKnowledgeBaseResponse struct {
 	KnowledgeBase UploadKBInfo    `json:"knowledgeBase"`
 	Storage       UploadKBStorage `json:"storage"`

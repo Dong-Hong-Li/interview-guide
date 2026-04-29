@@ -1,6 +1,6 @@
 package interview
 
-// QuestionType 与 Java InterviewQuestionDTO.QuestionType 一致，供 API、AI 出题目与序列化复用。
+// QuestionType 面试题类型字面量，供 API 出参、AI 出题与 JSON 序列化共用。
 type QuestionType string
 
 const (
@@ -20,9 +20,7 @@ const (
 	TypeSpring QuestionType = "SPRING" // Spring
 	// Spring Boot
 	TypeSpringBoot QuestionType = "SPRING_BOOT" // Spring Boot
-	// 前端/全栈
-	// 前端/全栈 模板 interview-question-*.st 中使用的类型（与主项目 interview_questions 一致）
-	// 前端/全栈
+	// 前端/全栈 模板 interview-question-*.st 中使用的类型
 	TypeWebBasic QuestionType = "WEB_BASIC"
 	// JavaScript/TypeScript
 	TypeJavaScriptTypeScript QuestionType = "JAVASCRIPT_TYPESCRIPT"

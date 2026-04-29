@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-// Result 与 Java 侧 interview.guide.common.result.Result 字段一致，便于后续对接前端。
+// Result 统一 HTTP 业务返回体（code / message / data），供前端按既定结构解析。
 type Result struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

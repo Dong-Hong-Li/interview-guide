@@ -6,7 +6,7 @@ const (
 	APIMountPath = "/rag-chat"
 )
 
-// 相对已挂载在 /api 上的 chi Router 的 pattern（与主项目 ragchathttp.apis 一致）。
+// 相对已挂载在 /api 上的 chi Router 的 pattern 集合，集中维护避免散落在 controller 中。
 const (
 	// PathSessions 会话列表 / 创建
 	PathSessions = "/sessions"

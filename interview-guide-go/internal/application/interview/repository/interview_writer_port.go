@@ -30,7 +30,7 @@ type InterviewSessionWriter interface {
 	// LoadForReport 按对外 sessionId 查会话行与全部答题，供报告接口。
 	LoadForReport(ctx context.Context, publicSessionID string) (*results.SessionReportDB, []results.InterviewAnswerDB, error)
 
-	// ── 面试 LLM 评估（最后一题交卷后 PENDING + 入队，消费者与落库与主项目一致）──
+	// ── 面试 LLM 评估（最后一题交卷后置 PENDING + 入队，由消费者打分并落库）──
 	UpdateInterviewSessionEvaluatePending(ctx context.Context, sessionPK int64) error
 	// GetWorkerSessionByPublicID 按对外 sessionId 加载会话行（含内部主键），无行时 (nil, nil)。
 	GetWorkerSessionByPublicID(ctx context.Context, publicSessionID string) (*ivmodel.WorkerSession, error)

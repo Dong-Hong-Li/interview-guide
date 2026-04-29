@@ -2,7 +2,7 @@ package results
 
 import "time"
 
-// KnowledgeBaseListItem 与 example KnowledgeBaseListItemDTO 及前端列表字段一致。
+// KnowledgeBaseListItem 知识库列表/详情统一返回项，前端列表与详情页直接消费。
 type KnowledgeBaseListItem struct {
 	ID               int64      `json:"id"`
 	Name             string     `json:"name"`
@@ -19,7 +19,7 @@ type KnowledgeBaseListItem struct {
 	ChunkCount       int        `json:"chunkCount"`
 }
 
-// KnowledgeBaseStats 与 example KnowledgeBaseStatsDTO 一致。
+// KnowledgeBaseStats 知识库总量与状态分桶统计的响应结构。
 type KnowledgeBaseStats struct {
 	TotalCount         int64 `json:"totalCount"`
 	TotalQuestionCount int64 `json:"totalQuestionCount"`

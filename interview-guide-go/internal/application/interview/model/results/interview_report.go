@@ -2,7 +2,7 @@ package results
 
 import "time"
 
-// InterviewReport GET /api/interview/sessions/{id}/report，与主项目、前端 `InterviewReport` 字段一致。
+// InterviewReport GET /api/interview/sessions/{id}/report 的响应体，供前端报告页与 PDF 导出共用。
 
 type InterviewReport struct {
 	SessionID        string                   `json:"sessionId"`

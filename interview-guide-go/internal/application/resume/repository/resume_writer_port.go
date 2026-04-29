@@ -9,7 +9,7 @@ import (
 // ErrResumeNotFound 队列消费者按 ID 加载简历时未命中。
 var ErrResumeNotFound = errors.New("resume not found")
 
-// ErrResumeTextUnavailable 重分析时库内与对象存储均无法得到可用简历正文（与 Java RESUME_PARSE_FAILED 语义相当）。
+// ErrResumeTextUnavailable 重分析时库内与对象存储均无法得到可用简历正文，调用方据此返回明确错误。
 var ErrResumeTextUnavailable = errors.New("无法获取简历文本内容")
 
 // ResumeInsert 写入简历表所需字段（与 ORM 表解耦，由基础设施映射为行）。
@@ -152,7 +152,7 @@ type ResumeWriter interface {
 	// UpdateAnalyzeStatus 更新简历分析状态（COMPLETE / FAILED）。
 	UpdateAnalyzeStatus(ctx context.Context, resumeID int64, status string, errorMessage string) error
 
-	// UpdateResumeText 只更新 resume_text 列，用于重分析时回灌从对象存储重新解析的文本（与 Java 写回 entity 的缓存一致）。
+	// UpdateResumeText 只更新 resume_text 列，用于重分析时回灌从对象存储重新解析后的文本，避免再次拉取。
 	UpdateResumeText(ctx context.Context, resumeID int64, resumeText string) error
 
 	// InsertResumeAnalysis 写入一条 AI 分析结果（resume_analyses）。

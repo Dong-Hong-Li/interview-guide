@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// CurrentQuestionService 只读：按 sessionId 取当前应答题 / 轮询题是否就绪（与主项目 GetCurrentQuestion 对齐）。
+// CurrentQuestionService 只读服务：按 sessionId 取当前应答题，并支持前端轮询题目是否就绪。
 type CurrentQuestionService struct {
 	sessions repository.InterviewSessionWriter
 }

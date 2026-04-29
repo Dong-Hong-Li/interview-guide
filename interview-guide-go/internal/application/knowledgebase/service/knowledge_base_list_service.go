@@ -12,7 +12,7 @@ import (
 	"interview-guide-go/shared/response"
 )
 
-// KnowledgeBaseListService 与 Java KnowledgeBaseListService 对齐的列表/分类/统计。
+// KnowledgeBaseListService 提供知识库的列表 / 分类 / 统计 / 搜索查询。
 type KnowledgeBaseListService struct {
 	reader kbrepo.KnowledgeBaseReader
 }
@@ -33,7 +33,7 @@ func (s *KnowledgeBaseListService) GetByID(ctx context.Context, id int64) (*resu
 	return s.reader.GetKnowledgeBaseByID(ctx, id)
 }
 
-// List 根据 vectorStatus 过滤，并按 sortBy 做与 Java 一致的内存排序（time 已在库侧倒序上传时间）。
+// List 根据 vectorStatus 过滤后，按 sortBy 做内存排序（time 已在库侧按上传时间倒序）。
 func (s *KnowledgeBaseListService) List(ctx context.Context, vectorStatus *string, sortBy string) ([]results.KnowledgeBaseListItem, error) {
 	if s == nil || s.reader == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
@@ -64,7 +64,7 @@ func (s *KnowledgeBaseListService) Categories(ctx context.Context) ([]string, er
 	return cats, nil
 }
 
-// Statistics 返回统计与 Java getStatistics 一致（含 rag_chat_messages USER 条数）。
+// Statistics 返回知识库统计（含 rag_chat_messages 中 USER 角色消息数）。
 func (s *KnowledgeBaseListService) Statistics(ctx context.Context) (*results.KnowledgeBaseStats, error) {
 	if s == nil || s.reader == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
@@ -72,7 +72,7 @@ func (s *KnowledgeBaseListService) Statistics(ctx context.Context) (*results.Kno
 	return s.reader.GetStatistics(ctx)
 }
 
-// Search 与 Java search：keyword 为空或仅空白时退回全量列表（同 listKnowledgeBases()）。
+// Search 关键字搜索：keyword 为空或仅空白时退回全量列表，便于前端复用同一个端点。
 func (s *KnowledgeBaseListService) Search(ctx context.Context, keyword string) ([]results.KnowledgeBaseListItem, error) {
 	if s == nil || s.reader == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)

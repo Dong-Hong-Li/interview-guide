@@ -11,7 +11,7 @@ import (
 	domainiv "interview-guide-go/internal/domain/interview"
 )
 
-// EvaluateProcessor 封装面试 LLM 评估 consumers 所需「抢单、拉题、写报告、刷缓存」能力（与主项目 interview.Service Worker* 对齐）。
+// EvaluateProcessor 封装面试整卷 LLM 评估消费者所需的「抢单、拉题、写报告、刷缓存」能力。
 type EvaluateProcessor struct {
 	sessions repository.InterviewSessionWriter
 	cache    repository.InterviewSessionCache
@@ -67,7 +67,7 @@ func (p *EvaluateProcessor) WorkerSaveEvaluationResult(ctx context.Context, sess
 	return p.sessions.SaveInterviewEvaluationResult(ctx, sessionPK, report)
 }
 
-// WorkerGetResumeTextAndInterviewerRole 与主项目 WorkerGetResumeRow 等价的简历正文 + 角色。
+// WorkerGetResumeTextAndInterviewerRole 取出简历正文与面试官角色，供评估 LLM 拼装上下文。
 func (p *EvaluateProcessor) WorkerGetResumeTextAndInterviewerRole(ctx context.Context, resumeID int64) (resumeText, interviewerRole string, err error) {
 	if p == nil || p.resume == nil {
 		return "", "", errors.New("resume source not configured")

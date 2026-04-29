@@ -32,7 +32,7 @@ const (
 	KnowledgeBaseQueryQuestionEmpty        = "问题不能为空"
 	KnowledgeBaseQueryKnowledgeBaseIDsEmpty = "至少选择一个知识库"
 	KnowledgeBaseVectorNotReadyForQuery    = "所选知识库尚未完成向量化或不可用，请稍后再试"
-	// KnowledgeBaseQueryNoHitResponse 检索无有效分块或与阈值不匹配时的固定答复（与 Java NO_RESULT_RESPONSE 语义对齐）。
+	// KnowledgeBaseQueryNoHitResponse 检索无有效分块或与阈值不匹配时返回的固定答复，避免 LLM 在无依据时编造内容。
 	KnowledgeBaseQueryNoHitResponse = "抱歉，在选定的知识库中未检索到相关信息。请换一个更具体的关键词或补充上下文后再试。"
 )
 

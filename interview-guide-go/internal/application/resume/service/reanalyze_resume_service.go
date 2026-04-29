@@ -35,7 +35,7 @@ func NewReanalyzeResumeService(
 	}
 }
 
-// ReanalyzeResume 重新分析简历（与 example ResumeUploadService.reanalyze 对齐：可空库内文本时从对象存储拉取解析并写回，再 PENDING 并入队）。
+// ReanalyzeResume 重新分析简历：当库内 resume_text 为空时回灌对象存储中的原文，置 PENDING 并重新入队。
 func (s *ReanalyzeResumeService) ReanalyzeResume(ctx context.Context, id int64) error {
 	// 1. 获取简历信息
 	rec, err := s.ResumeWriter.GetResumeForDetail(ctx, id)
@@ -64,8 +64,8 @@ func (s *ReanalyzeResumeService) ReanalyzeResume(ctx context.Context, id int64) 
 	return nil
 }
 
-// rehydrateResumeTextFromStorage 在 resume_text 为空时，
-// 按 storage_key 下载并解析，并写回 DB（同 Java setResumeText + save 前的缓存回灌）。
+// rehydrateResumeTextFromStorage 在 resume_text 为空时按 storage_key 重新下载并解析对象存储，
+// 解析成功后写回 DB，避免后续重分析每次都拉对象存储。
 func (s *ReanalyzeResumeService) rehydrateResumeTextFromStorage(ctx context.Context, rec *repository.ResumeForDetail) (string, error) {
 	key := strings.TrimSpace(rec.StorageKey)
 	if key == "" || s.Storage == nil {

@@ -10,7 +10,7 @@ type InterviewSessionCache interface {
 	// 保存会话
 	SaveSession(ctx context.Context, sessionID, resumeText string, resumeID *int64, questionsJSON string, currentIndex int, status string, advertisedTotalQuestions *int) error
 
-	// DeleteSessionKeys 删除 interview:session:* 与 resumeId→sessionId 索引（与主项目 sessioncache 一致）
+	// DeleteSessionKeys 删除 interview:session:* 与 resumeId→sessionId 索引，避免会话删除后留下脏缓存。
 	DeleteSessionKeys(ctx context.Context, sessionID string, resumeID int64) error
 
 	// TryAcquireCreatingLock 同简历并发创建会话时，仅一路应调用 LLM；在出题落库前用 Redis SETNX 互斥。成功为 acquired=true。

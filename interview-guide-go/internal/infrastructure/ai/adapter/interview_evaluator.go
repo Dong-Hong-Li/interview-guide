@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// 与 Java AnswerEvaluationService.EvaluationReportDTO + BeanOutputConverter 对齐的批次 JSON 契约（非完整 InterviewReport）。
+// interviewBatchEvalJSONContract LLM 单批次评估的 JSON 输出契约，规定字段顺序与必含项，便于反序列化。
 const interviewBatchEvalJSONContract = `
 
 # 机器可读输出契约（覆盖上文「Output Format」中 sessionId 等字段）
@@ -60,7 +60,7 @@ func interviewQuestionUserAnswerStr(q results.InterviewQuestion) string {
 	return strings.TrimSpace(*q.UserAnswer)
 }
 
-// InterviewEvaluator 对齐 Java AnswerEvaluationService：分批评估 + 二次汇总 + convertToReport。
+// InterviewEvaluator 整卷评估器：将答题分批送 LLM 打分，再做一次汇总并转换为最终 InterviewReport。
 type InterviewEvaluator struct {
 	client              openai.Client
 	model               shared.ChatModel
@@ -592,7 +592,7 @@ func convertInterviewEvalToReport(
 		for _, d := range qDetails {
 			sum += d.Score
 		}
-		// 与 Java questionDetails.stream().mapToInt(...).average() 后 (int) 强转一致（向零截断）
+		// 各题得分平均后向零截断为整数，避免出现非整数总分。
 		overall = sum / len(qDetails)
 	}
 

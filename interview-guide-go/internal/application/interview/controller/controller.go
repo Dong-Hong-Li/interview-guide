@@ -180,7 +180,7 @@ func (c *InterviewController) getInterviewDetail(ctx context.Context, in model.G
 	return c.GetInterviewDetailService.GetDetail(ctx, sid)
 }
 
-// handleExportInterviewPDF GET /api/interview/sessions/{sessionId}/export，body 为 application/pdf 二进制（与主项目一致，不用 JSON binding）。
+// handleExportInterviewPDF GET /api/interview/sessions/{sessionId}/export：响应 application/pdf 二进制流，不走 JSON binding。
 func (c *InterviewController) handleExportInterviewPDF(w http.ResponseWriter, r *http.Request) {
 	sid := strings.TrimSpace(chi.URLParam(r, "sessionId"))
 	if c.ReportService == nil {
@@ -214,7 +214,7 @@ func (c *InterviewController) getSession(ctx context.Context, in model.GetSessio
 	return c.GetSessionService.GetSession(ctx, sid)
 }
 
-// completeInterview POST /api/interview/sessions/{sessionId}/complete 提前交卷并触发评估入队（与主项目 complete 对齐）。
+// completeInterview POST /api/interview/sessions/{sessionId}/complete：提前交卷并触发整卷评估入队。
 func (c *InterviewController) completeInterview(ctx context.Context, in model.CompleteSessionReq) (any, error) {
 	if c.CompleteSessionService == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, "complete session not configured")

@@ -2,7 +2,7 @@ package results
 
 import "interview-guide-go/shared/interview"
 
-// InterviewSession 与 Java InterviewSessionDTO 对齐：创建会话、恢复未完成会话、getSession 等 API 的 data 体。
+// InterviewSession 创建会话、恢复未完成会话、getSession 等 API 的统一响应数据体。
 type InterviewSession struct {
 	SessionID            string                  `json:"sessionId"`
 	ResumeID             int64                   `json:"resumeId,omitempty"`
@@ -13,7 +13,7 @@ type InterviewSession struct {
 	Status               interview.SessionStatus `json:"status"`
 }
 
-// InterviewQuestion 与 Java InterviewQuestionDTO 字段一一对应。
+// InterviewQuestion 单道面试题在 API/前端展示态的字段约束。
 // 新建会话时仅 index、question、type、category、追问标记有值，答题与评估后带 answer/score/feedback。
 type InterviewQuestion struct {
 	QuestionIndex       int                    `json:"questionIndex"`

@@ -61,7 +61,7 @@ func (s *ExportAnalysisPDFService) ExportAnalysisPDF(ctx context.Context, id int
 }
 
 // renderResumeAnalysisPDF 把详情结果映射为 pdfexport DTO 再渲染。
-// 仅使用详情里「最新一条分析记录」，与 Java ResumeHistoryService.exportAnalysisPdf 语义一致。
+// 仅使用详情里「最新一条分析记录」，避免历史记录干扰本次导出。
 func renderResumeAnalysisPDF(d *result.ResumeDetailResult) ([]byte, error) {
 	if d == nil || len(d.Analyses) == 0 {
 		return nil, sharedresume.ErrNoResumeAnalysis

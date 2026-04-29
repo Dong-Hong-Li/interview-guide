@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	aicore "interview-guide-go/internal/infrastructure/ai"
 	res "interview-guide-go/internal/application/interview/model/results"
+	aicore "interview-guide-go/internal/infrastructure/ai"
 	"interview-guide-go/internal/infrastructure/ai/promptprofile"
 	ityp "interview-guide-go/shared/interview"
 	"interview-guide-go/shared/logmsg"
@@ -189,7 +189,7 @@ func (g *InterviewQuestionGenerator) GenerateForQueue(ctx context.Context, resum
 		g.lg.Warn("interview question resume text truncated", zap.Int("runes", n), zap.Int("max", g.maxRunes))
 		text = string([]rune(text)[:g.maxRunes])
 	}
-	// 生成面试题列表（与主项目 Generate 一致打耗时/成败日志；此处不降级默认题，失败仅记录并返回 error）
+	// 调 LLM 生成面试题：记录调用耗时与成败日志；此处不再降级到默认题，失败直接返回 error 让上游处理。
 	llmStart := time.Now()
 	out, err := g.generateViaLLM(ctx, text, questionCount, historicalQuestions, interviewerRole)
 	llmElapsed := time.Since(llmStart)

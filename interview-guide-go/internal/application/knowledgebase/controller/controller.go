@@ -53,8 +53,8 @@ func (c *KnowledgeBaseController) Register(r chi.Router) {
 	})
 }
 
-// uploadKnowledgeBase POST /api/knowledgebase/upload：上传知识库文件，解析、落库与入队向量化以主产品为准；
-// 与 Java example/modules/knowledgebase 对齐时建议按序落地（可拆为 UploadService + 复用 storage/mapper/Redis，参考 Resume 上传与面试评估消费者形态）：
+// uploadKnowledgeBase POST /api/knowledgebase/upload：上传知识库文件，
+// 完成解析 → 落库 → 入队向量化（消费者复用 storage / mapper / Redis Stream 链路）。
 func (c *KnowledgeBaseController) uploadKnowledgeBase(ctx context.Context, request model.KBPostUploadRequest) (any, error) {
 	if c == nil || c.UploadService == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseUploadServiceNil)
@@ -106,7 +106,7 @@ func (c *KnowledgeBaseController) uploadKnowledgeBase(ctx context.Context, reque
 	return c.UploadService.Upload(ctx, validated)
 }
 
-// getAllKnowledgeBases GET /api/knowledgebase/list：与 Java listKnowledgeBases（sortBy、vectorStatus）一致。
+// getAllKnowledgeBases GET /api/knowledgebase/list：按 sortBy 排序，可选 vectorStatus 过滤。
 func (c *KnowledgeBaseController) getAllKnowledgeBases(ctx context.Context, req model.KBListQueryReq) (any, error) {
 	if c == nil || c.ListService == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
@@ -139,7 +139,7 @@ func (c *KnowledgeBaseController) getUncategorized(ctx context.Context, req mode
 	return c.ListService.ListUncategorized(ctx, strings.TrimSpace(req.SortBy))
 }
 
-// getStatistics GET /api/knowledgebase/stats：与 Java getStatistics 一致。
+// getStatistics GET /api/knowledgebase/stats：返回知识库总条数、命中量、向量化态等统计。
 func (c *KnowledgeBaseController) getStatistics(ctx context.Context) (any, error) {
 	if c == nil || c.ListService == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
@@ -159,7 +159,7 @@ func (c *KnowledgeBaseController) getByCategory(ctx context.Context, req model.K
 	return c.ListService.ListByCategory(ctx, cat, strings.TrimSpace(req.SortBy))
 }
 
-// search GET /api/knowledgebase/search?keyword= 与 Java search、前端 knowledgeBaseApi.search 一致。
+// search GET /api/knowledgebase/search?keyword=：按 name / original_filename 子串模糊匹配，供前端搜索框使用。
 func (c *KnowledgeBaseController) search(ctx context.Context, req model.KBSearchReq) (any, error) {
 	if c == nil || c.ListService == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)
@@ -293,7 +293,7 @@ func (c *KnowledgeBaseController) handleDownloadKnowledgeBase(w http.ResponseWri
 	_, _ = w.Write(out.Data)
 }
 
-// getKnowledgeBase GET /api/knowledgebase/{id}：与 Java getKnowledgeBase 一致，返回 KnowledgeBaseListItem。
+// getKnowledgeBase GET /api/knowledgebase/{id}：按主键返回单条 KnowledgeBaseListItem。
 func (c *KnowledgeBaseController) getKnowledgeBase(ctx context.Context, req model.KBIDPathReq) (any, error) {
 	if c == nil || c.ListService == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, errmsg.KnowledgeBaseListServiceNil)

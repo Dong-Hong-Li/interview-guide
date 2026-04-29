@@ -14,7 +14,7 @@ import (
 	"interview-guide-go/shared/response"
 )
 
-// GetInterviewDetailService GET /api/interview/sessions/{id}/details（与主项目 GetDetail 一致：仅校验会话存在，无交卷/报告门禁）。
+// GetInterviewDetailService GET /api/interview/sessions/{id}/details：仅校验会话存在，无交卷/报告门禁，便于前端在任意阶段拉详情。
 type GetInterviewDetailService struct {
 	sessions repository.InterviewSessionWriter
 }

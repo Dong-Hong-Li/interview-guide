@@ -20,7 +20,7 @@ func NewGetSessionService(sessions repository.InterviewSessionWriter) *GetSessio
 	return &GetSessionService{sessions: sessions}
 }
 
-// GetSession 与主项目 GetSession 语义一致：加载会话、合并 interview_answers，供详情/轮询使用。
+// GetSession 加载会话、合并 interview_answers，供详情查询与前端轮询复用。
 func (s *GetSessionService) GetSession(ctx context.Context, sessionID string) (*results.InterviewSession, error) {
 	if s.sessions == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, "interview session not configured")

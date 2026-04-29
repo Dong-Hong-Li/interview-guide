@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// UploadKnowledgeBaseService 与 Java KnowledgeBaseUploadService 对齐的去重、存储、落库、入队向量化。
+// UploadKnowledgeBaseService 知识库上传用例：去重 → 解析 → 存储 → 落库 → 入队向量化。
 // 只接收 controller 已校验并封装的 ValidatedKnowledgeBaseUpload；**不校验** HTTP 原始入参；正文抽取在 Upload 内完成。
 type UploadKnowledgeBaseService struct {
 	lg        *zap.Logger
@@ -65,7 +65,8 @@ func (s *UploadKnowledgeBaseService) Upload(ctx context.Context, in *model.Valid
 	// 4 去重：对原始字节做 hash（查 knowledge_bases.file_hash 唯一索引；若已存在则做 incrementAccessCount、保存，
 	// 返回 duplicate=true、contentLength=0、不再次上传、不重新入队向量化（假定向量已存在）。
 	fileHash := hashContent(content)
-	// 5. 解析：KnowledgeBaseParseService 等价物——从文件中抽取纯文本；若空则 5xx/业务错误「无法从文件中提取文本内容」；解析结果用于入队，不落库大文本（Java 不存 content 全文）。
+	// 5. 解析：从文件中抽取纯文本；若为空则返回业务错误「无法从文件中提取文本内容」。
+	//    解析结果仅用于入队向量化，不在 knowledge_bases 表落库大文本，节省主表体积。
 	parsedText := strings.TrimSpace(s.text.ExtractKnowledgeBaseText(content, filename, contentType))
 	if parsedText == "" {
 		if s.lg != nil {

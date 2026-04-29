@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// DisplayNameFromFilename 与 Java KnowledgeBasePersistenceService.extractNameFromFilename 一致：去扩展名；空则「未命名知识库」。
+// DisplayNameFromFilename 取文件 basename 并去掉扩展名作为知识库展示名；空文件名返回「未命名知识库」。
 func DisplayNameFromFilename(filename string) string {
 	base := filepath.Base(strings.TrimSpace(filename))
 	if base == "" || base == "." {

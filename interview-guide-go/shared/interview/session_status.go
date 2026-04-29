@@ -1,7 +1,7 @@
-// Package interview 存放面试域与 Java 服务对齐的跨层常量（与 internal/application/.../model 解耦）。
+// Package interview 存放面试域跨层使用的常量（与 internal/application/.../model 解耦），供 API、Redis、DB 复用。
 package interview
 
-// SessionStatus 与 Java InterviewSessionDTO.SessionStatus 一致，供 API、Redis/DB 复用。
+// SessionStatus 面试会话状态字面量，对外 API、Redis 缓存与 DB 列共用。
 type SessionStatus string
 
 const (

@@ -128,7 +128,7 @@ func (m *KnowledgeBaseMapper) InsertKnowledgeBase(ctx context.Context, in *kbrep
 	return row.ID, nil
 }
 
-// IncrementAccessCount 重复上传时与 Java handleDuplicateKnowledgeBase 一致：access_count+1。
+// IncrementAccessCount 文件去重命中已存在记录时调用，将 access_count 自增 1。
 func (m *KnowledgeBaseMapper) IncrementAccessCount(ctx context.Context, id int64) error {
 	if m == nil || m.db == nil || id < 1 {
 		return errors.New("invalid id")
@@ -368,7 +368,7 @@ func (m *KnowledgeBaseMapper) ListDistinctCategories(ctx context.Context) ([]str
 	return cats, nil
 }
 
-// GetStatistics 与 Java getStatistics 字段一致。
+// GetStatistics 汇总知识库统计：条数、向量化态分桶、USER 消息条数、访问合计。
 func (m *KnowledgeBaseMapper) GetStatistics(ctx context.Context) (*results.KnowledgeBaseStats, error) {
 	if m == nil || m.db == nil {
 		return nil, errors.New("db not configured")
@@ -466,7 +466,7 @@ LIMIT ?
 	return out, nil
 }
 
-// IncrementQuestionCounts 将所列知识库的 question_count 各 +1（与 Java updateQuestionCounts 对齐）。
+// IncrementQuestionCounts 将所列知识库的 question_count 字段各自 +1，用于命中后统计。
 func (m *KnowledgeBaseMapper) IncrementQuestionCounts(ctx context.Context, ids []int64) error {
 	if m == nil || m.db == nil || len(ids) == 0 {
 		return nil

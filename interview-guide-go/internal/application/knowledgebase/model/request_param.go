@@ -1,6 +1,6 @@
 package model
 
-// KBListQueryReq GET /api/knowledgebase/list 查询参数（与 Java sortBy、vectorStatus 一致）。
+// KBListQueryReq GET /api/knowledgebase/list 查询参数：sortBy 排序字段、vectorStatus 状态过滤。
 type KBListQueryReq struct {
 	SortBy       string `query:"sortBy"`
 	VectorStatus string `query:"vectorStatus"`
@@ -23,7 +23,7 @@ type KBUncategorizedQueryReq struct {
 	SortBy string `query:"sortBy"`
 }
 
-// KBSearchReq 搜索知识库（与前端 `?keyword=`、Java `search(keyword)` 一致）。
+// KBSearchReq GET /api/knowledgebase/search?keyword= 搜索知识库的查询参数。
 type KBSearchReq struct {
 	Keyword string `query:"keyword"`
 }
@@ -42,9 +42,8 @@ type KBUpdateCategoryReq struct {
 	Category *string `json:"category"`
 }
 
-// KBPostUploadRequest，Content-Type: multipart/form-data。
-// 与 Java KnowledgeBaseController.uploadKnowledgeBase（file、name、category）及前端 knowledgeBaseApi.uploadKnowledgeBase 一致。
-// binding：[]byte + form:"file" 读文件体；Filename/ContentType 由文件头自动填充（勿手填）；name、category 为普通 form 字段。
+// KBPostUploadRequest 知识库上传请求体，Content-Type: multipart/form-data。
+// binding 约定：[]byte + form:"file" 读文件体；Filename/ContentType 由文件头自动填充（勿手填）；name、category 为普通 form 字段。
 type KBPostUploadRequest struct {
 	Filename    string `json:"filename" form:"-"`
 	ContentType string `json:"content_type" form:"-"`

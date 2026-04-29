@@ -164,7 +164,7 @@ const (
 	// FieldKnowledgeChunkInputRunes 知识库向量化：送 AI 分片的全文 Unicode 字符数（与 Stream body / pg_meta 后正文一致，非简历）。
 	FieldKnowledgeChunkInputRunes = "kbChunkInputRunes"
 	FieldAIDuration               = "AI 评分耗时"
-	// FieldLLMDuration 与主项目 internal/shared/logmsg 的 aiDuration 对齐，供面试题 LLM 等通用模型耗时。
+	// FieldLLMDuration 通用 LLM 调用耗时字段，供面试题生成、评估等链路统一记录。
 	FieldLLMDuration = "aiDuration"
 	// FieldSessionID 对外 session_id；面试评估/会话日志共用。
 	FieldSessionID = "sessionId"

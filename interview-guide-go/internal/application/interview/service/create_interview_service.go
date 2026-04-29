@@ -40,7 +40,7 @@ func NewCreateInterviewService(
 	}
 }
 
-// CreateInterview 对齐 Java InterviewSessionService#createSession；入参须为 controller 校验后的 ValidatedCreateInterviewSession。
+// CreateInterview 创建面试会话：抢 Redis 创建锁、异步生成题目、状态置 QUESTIONS_PENDING；入参须为 controller 校验后的 ValidatedCreateInterviewSession。
 func (s *CreateInterviewService) CreateInterview(ctx context.Context, in model.ValidatedCreateInterviewSession) (*results.InterviewSession, error) {
 	if s.interviewWriter == nil {
 		return nil, response.Err(http.StatusServiceUnavailable, "interview writer not configured")

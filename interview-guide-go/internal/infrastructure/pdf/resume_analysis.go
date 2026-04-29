@@ -19,7 +19,7 @@ var ErrNoFont = errors.New("pdfexport: no CJK font path")
 
 var emojiStripper = regexp.MustCompile(`\p{So}|\p{Cs}`)
 
-// 与 Java PdfExportService 主色接近（RGB）。
+// PDF 排版主色板（RGB），统一标题、小节、正文、辅助文本等的视觉层次。
 const (
 	colPrimary   = uint8(41) // 标题 / 强调
 	colPrimaryG  = uint8(128)
@@ -86,7 +86,7 @@ type suggestionRow struct {
 	Recommendation string `json:"recommendation"`
 }
 
-// scoreTone 按「得分占满分比例」给文字色（对齐 Java getScoreColor 思路）。
+// scoreTone 按「得分占满分比例」给出文字色：≥80 绿色、≥60 黄色，其余红色。
 func scoreTone(score, max int) (uint8, uint8, uint8) {
 	if max <= 0 {
 		return colBody, colBodyG, colBodyB
@@ -114,7 +114,7 @@ func brDown(pdf *gopdf.GoPdf, left, h float64) {
 	pdf.SetX(left)
 }
 
-// RenderResumeAnalysisPDF 生成简历分析报告 PDF（版式较 Java 版略简，但层次与配色对齐）。
+// RenderResumeAnalysisPDF 渲染简历分析报告 PDF：含基本信息、各维度得分、强项与改进建议。
 func RenderResumeAnalysisPDF(resume *ResumeExport, analysis *ResumeAnalysisExport) ([]byte, error) {
 	if resume == nil || analysis == nil {
 		return nil, fmt.Errorf("nil resume or analysis")

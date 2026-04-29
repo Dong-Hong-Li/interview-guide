@@ -1,6 +1,6 @@
 package result
 
-// UploadStorage 与 Java / interview-guide 前端约定的 storage 块（UploadPage 读取 data.storage.resumeId）。
+// UploadStorage 简历上传返回中的 storage 子块（前端 UploadPage 通过 data.storage.resumeId 取主键）。
 type UploadStorage struct {
 	FileKey  string `json:"fileKey"`
 	FileURL  string `json:"fileUrl"`

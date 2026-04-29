@@ -1,6 +1,6 @@
 package errmsg
 
-// 面试 API 与主项目 internal/shared/errmsg/interview 对齐的对外提示。
+// 面试 API 对外提示文案集中定义，禁止散落在 service / controller 中。
 const (
 	FindUnfinishedNotFound    = "未找到未完成的面试会话"
 	FindUnfinishedBadResumeID = "无效的简历 ID"
@@ -11,7 +11,7 @@ const (
 
 	CompleteInterviewAlreadyDone = "面试已完成，无法再次交卷"
 	CompleteInterviewFailed      = "提前交卷失败"
-	// QuestionsNotReady 题目列表仍为空且非明确失败态时的提示（与主项目 SubmitAnswerQuestionsNotReady 语义接近）。
+	// QuestionsNotReady 题目列表仍为空且非明确失败态时的轮询提示。
 	QuestionsNotReady       = "题目尚未就绪，请稍候重试"
 	QuestionsPendingMessage = "题目正在生成中，请稍候"
 	QuestionsFailedMessage  = "题目生成失败，请重新开始面试"
@@ -32,10 +32,10 @@ const (
 	GetInterviewReportEvalFailed      = "面试评估失败"
 	GetInterviewReportSyntheticNotice = "综合评估生成中或未接入评估服务；以下为各题答题与得分记录。"
 
-	// InterviewExportPDFFailed 与主项目 internal/shared/errmsg 对齐，供 GET .../export 非字体类失败时返回。
+	// InterviewExportPDFFailed 供 GET .../export 在非字体类故障时返回的统一文案。
 	InterviewExportPDFFailed = "导出面试报告 PDF 失败"
 
-	// InterviewEvalTimeout / InterviewQuestionGenCanceled 供面试评估 Redis 消费者与落库错误文案使用（与主项目 errmsg 对齐）。
+	// InterviewEvalTimeout / InterviewQuestionGenCanceled 供面试评估 Redis 消费者与落库时复用的失败文案。
 	InterviewEvalTimeout         = "评估超时：模型响应超过时限，请稍后重试或重新交卷触发评估"
 	InterviewQuestionGenCanceled = "评估已取消"
 )

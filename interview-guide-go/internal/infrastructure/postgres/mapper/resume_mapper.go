@@ -158,7 +158,7 @@ func (m *ResumeMapper) GetResumeForAnalyze(ctx context.Context, resumeID int64) 
 	return toExistingResume(row), nil
 }
 
-// InterviewerRoleByResumeID 实现 interview.InterviewerRoleReader，供按简历选 backend/frontend 出题（与主项目模板一致）。
+// InterviewerRoleByResumeID 实现 interview.InterviewerRoleReader，按简历返回 BACKEND / FRONTEND，决定面试题模板分支。
 func (m *ResumeMapper) InterviewerRoleByResumeID(ctx context.Context, resumeID int64) (string, error) {
 	ex, err := m.GetResumeForAnalyze(ctx, resumeID)
 	if err != nil {

@@ -50,7 +50,7 @@ type KnowledgeBaseWriter interface {
 	FindByFileHash(ctx context.Context, fileHash string) (*ExistingKnowledgeBase, error)
 	// 插入一行并返回主键。
 	InsertKnowledgeBase(ctx context.Context, in *KnowledgeBaseInsert) (id int64, err error)
-	// 重复上传时与 Java handleDuplicateKnowledgeBase 一致：access_count+1。
+	// 文件哈希命中已有记录时的去重处理：access_count+1。
 	IncrementAccessCount(ctx context.Context, id int64) error
 	// 	入队失败或消费者回写时用。
 	UpdateVectorStatus(ctx context.Context, id int64, status, errMsg string) error
@@ -64,7 +64,7 @@ type KnowledgeBaseWriter interface {
 	DeleteKnowledgeBaseByID(ctx context.Context, id int64) error
 	// UpdateKnowledgeBaseCategory 更新 category 列；空串表示未分类。未影响行时返回 ErrKnowledgeBaseUpdateNoRow。
 	UpdateKnowledgeBaseCategory(ctx context.Context, id int64, category string) error
-	// IncrementQuestionCounts 每条知识库 question_count+1（与 Java countService.updateQuestionCounts 语义一致）。
+	// IncrementQuestionCounts 将所列知识库的 question_count 各 +1，用于命中后的访问计数。
 	IncrementQuestionCounts(ctx context.Context, ids []int64) error
 }
 

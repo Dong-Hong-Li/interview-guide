@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// StubInterviewQuestionGenerator 在 OpenAI 未就绪时注入；复用 *InterviewQuestionGenerator 的 defaultQuestions，与主项目默认题库一致。
+// StubInterviewQuestionGenerator 在 OpenAI 未就绪时注入，复用 *InterviewQuestionGenerator 的内置默认题库返回兜底题。
 type StubInterviewQuestionGenerator struct {
 	core *InterviewQuestionGenerator
 }
@@ -18,7 +18,7 @@ func NewStubInterviewQuestionGenerator() *StubInterviewQuestionGenerator {
 	return &StubInterviewQuestionGenerator{core: &InterviewQuestionGenerator{followUpCount: 0, lg: zap.NewNop()}}
 }
 
-// GenerateQuestions 将请求交给与主项目同构的 defaultQuestions（按 interviewerRole 分后端/前端维度）。
+// GenerateQuestions 将请求交给内置 defaultQuestions，按 interviewerRole 选取后端/前端默认题集。
 func (s *StubInterviewQuestionGenerator) GenerateQuestions(_ context.Context, _ string, questionCount int, _ []string, interviewerRole string) ([]results.InterviewQuestion, error) {
 	if s == nil || s.core == nil {
 		return nil, nil

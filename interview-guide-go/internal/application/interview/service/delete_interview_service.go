@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// DeleteInterviewService 删除一场面试会话及 Redis 侧键、答题子表（与主项目 DeleteSession 语义对齐）。
+// DeleteInterviewService 删除一场面试会话及其 Redis 侧键与答题子表，确保级联清理。
 type DeleteInterviewService struct {
 	sessions repository.InterviewSessionWriter
 	cache    repository.InterviewSessionCache
@@ -23,7 +23,7 @@ func NewDeleteInterviewService(sessions repository.InterviewSessionWriter, cache
 	return &DeleteInterviewService{sessions: sessions, cache: cache}
 }
 
-// DeleteSession 按对外 sessionId 删除；成功返回 { "message": "..." } 与主项目一致。
+// DeleteSession 按对外 sessionId 删除会话；成功返回 { "message": "..." }，便于前端弹提示。
 func (s *DeleteInterviewService) DeleteSession(ctx context.Context, sid string) (map[string]string, error) {
 	// 1. 获取会话
 	sess, err := s.sessions.GetSessionBySessionID(ctx, sid)

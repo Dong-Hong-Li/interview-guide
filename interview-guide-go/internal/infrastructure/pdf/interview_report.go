@@ -66,7 +66,7 @@ func interviewStatusLabel(st string) string {
 	}
 }
 
-// RenderInterviewReportPDF 生成模拟面试报告 PDF（版式与 Java PdfExportService.exportInterviewReport 接近）。
+// RenderInterviewReportPDF 渲染模拟面试报告 PDF：含会话概览、整体评价、强项/改进、逐题答题与参考答案。
 func RenderInterviewReportPDF(sess *InterviewReportSession, answers []InterviewReportAnswer) ([]byte, error) {
 	if sess == nil {
 		return nil, fmt.Errorf("nil session")

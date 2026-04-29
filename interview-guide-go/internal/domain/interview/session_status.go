@@ -1,7 +1,7 @@
-// Package interview 会话/评估状态常量与门禁，与主项目 internal/domain/interview 及 DB 列一致。
+// Package interview 面试会话/评估的状态常量与门禁函数，集中管理避免业务包写状态字面量。
 package interview
 
-// 会话状态（与 interview_sessions.status、Redis、Java SessionStatus 字面量一致）。
+// 会话状态（与 interview_sessions.status、Redis 缓存中的状态字面量一致）。
 const (
 	InterviewStatusCreated          = "CREATED"
 	InterviewStatusQuestionsPending = "QUESTIONS_PENDING"

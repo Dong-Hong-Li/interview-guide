@@ -1,7 +1,7 @@
 // Package resume 存放简历域与存储/队列对齐的跨层常量（与 internal/application/.../model 解耦）。
 package resume
 
-// AnalyzeStatus 与 resumes.analyze_status、Java 侧及前端展示一致（队列消费者与落库复用）。
+// AnalyzeStatus 简历分析状态字面量，与 resumes.analyze_status 列、Redis 消费者与前端展示共用。
 type AnalyzeStatus string
 
 const (

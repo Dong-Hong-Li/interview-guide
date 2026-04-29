@@ -79,7 +79,7 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	// ── 异步：简历分析 Redis Stream 消费者
 	startResumeAnalyzeConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, mapper.NewResumeMapper(postgresService.DB))
 
-	// ── 异步：面试 LLM 评估（最后一题后 evaluate_status=PENDING + 入队；与主项目 Java 版能力对齐）
+	// ── 异步：面试 LLM 评估（最后一题后 evaluate_status=PENDING + 入队，由消费者异步打分）
 	startInterviewEvaluateConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, postgresService)
 
 	// ── 异步：知识库向量化（Upload 后入队 knowledge:vectorize:stream；消费者分块→Embedding→knowledge_base_chunks）
@@ -119,7 +119,7 @@ func startResumeAnalyzeConsumerIfReady(
 	redisstream.StartResumeAnalyzeConsumer(ctx, redisService.Client, resumeWriter, grader, lg)
 }
 
-// startInterviewEvaluateConsumerIfReady 当 Redis / Postgres / OpenAI 就绪时启动「面试整卷 LLM 评估」消费者；否则仅记录并跳过（与主项目 deps 条件一致）。
+// startInterviewEvaluateConsumerIfReady 当 Redis / Postgres / OpenAI 都就绪时启动「面试整卷 LLM 评估」消费者；前置不满足直接 Fatal，避免静默漏起。
 func startInterviewEvaluateConsumerIfReady(
 	ctx context.Context,
 	cfg *config.Config,

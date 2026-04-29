@@ -2,7 +2,7 @@ package results
 
 import "time"
 
-// InterviewDetail GET /api/interview/sessions/{sessionId}/details，与主项目 dto.InterviewDetail、前端历史详情结构一致。
+// InterviewDetail GET /api/interview/sessions/{sessionId}/details 的响应数据体，供前端历史详情页直接消费。
 type InterviewDetail struct {
 	ID              int64      `json:"id"`
 	SessionID       string     `json:"sessionId"`

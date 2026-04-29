@@ -14,7 +14,7 @@ import (
 	"interview-guide-go/shared/response"
 )
 
-// SubmitAnswerService 处理 POST /sessions/{id}/answers（与主项目 SubmitAnswer 对齐）。
+// SubmitAnswerService 处理 POST /sessions/{id}/answers：落库当题、推进游标、最后一题入队整卷评估。
 type SubmitAnswerService struct {
 	sessions repository.InterviewSessionWriter
 	cache    repository.InterviewSessionCache

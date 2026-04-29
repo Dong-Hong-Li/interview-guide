@@ -14,7 +14,7 @@ import (
 	"interview-guide-go/shared/response"
 )
 
-// CompleteSessionService POST /sessions/{sessionId}/complete：提前交卷（无需答完所有题），与主项目 CompleteSession 对齐。
+// CompleteSessionService POST /sessions/{sessionId}/complete：允许候选人在未答完全部题目时提前交卷。
 type CompleteSessionService struct {
 	sessions repository.InterviewSessionWriter
 	cache    repository.InterviewSessionCache
@@ -65,7 +65,7 @@ func (s *CompleteSessionService) CompleteSession(ctx context.Context, sid string
 		return nil, response.Err(http.StatusBadRequest, gerr.Error())
 	}
 
-	// 与主项目 CompleteSession 顺序一致：先标记 COMPLETED，再 PENDING，再入队评估。
+	// 顺序：先把会话标记 COMPLETED，再置 evaluate_status=PENDING，最后入队评估，避免消费者抢在状态写入前执行。
 	if err := s.sessions.UpdateInterviewSessionProgress(ctx, rec.InternalID, rec.CurrentQuestionIndex, domainiv.InterviewStatusCompleted, true); err != nil {
 		return nil, response.Err(http.StatusInternalServerError, errmsg.CompleteInterviewFailed)
 	}

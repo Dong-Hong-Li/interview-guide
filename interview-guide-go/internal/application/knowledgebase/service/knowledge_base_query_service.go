@@ -22,7 +22,7 @@ import (
 const (
 	// kbQueryTopK 每个问题从 PG 拉取的候选分块条数上限（再做距离阈值过滤）。
 	kbQueryTopK = 16
-	// kbQueryMaxCosineDistance pgvector 余弦距离 <=> 的上限（越小越相似）；与 Java app.ai.rag.search.min-score-default≈0.28 对应约 (1-0.28)。
+	// kbQueryMaxCosineDistance pgvector 余弦距离 <=> 的上限（越小越相似）；约对应余弦相似度 0.28 的最低分阈值。
 	kbQueryMaxCosineDistance = 0.72
 	kbQueryLLMTimeout        = 4 * time.Minute
 
@@ -35,7 +35,7 @@ const (
 
 	// kbQuerySystemPrompt 约束模型仅依据检索片段作答；当用户问题宽泛/多义/仅部分命中资料时，
 	// 必须先基于实际命中的角度作答，再以「说明」段点出未覆盖方向并向用户反问具体场景，
-	// 避免单方向输出后用户得不到真正想要的答案（与 Java prompts/knowledgebase-query-system 同意图，并强化澄清式追问）。
+	// 避免单方向输出后用户得不到真正想要的答案。
 	kbQuerySystemPrompt = `你是一个严谨的助手，只根据下面给出的「参考资料」回答用户问题。
 
 回答要求：

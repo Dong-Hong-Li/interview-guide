@@ -49,7 +49,7 @@ const (
 	StreamFieldRetryCount = "retryCount"
 )
 
-// 知识库向量化异步任务 Stream / 组 / 字段（与 Java AsyncTaskStreamConstants.KB_VECTORIZE 对齐语义）。
+// 知识库向量化异步任务的 Stream 名 / 消费者组 / 字段集中定义。
 const (
 	// StreamKnowledgeVectorize 知识库分块+向量化任务
 	StreamKnowledgeVectorize = "knowledge:vectorize:stream"

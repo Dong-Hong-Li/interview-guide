@@ -13,7 +13,7 @@ import (
 	"interview-guide-go/shared/response"
 )
 
-// ReportService GET /sessions/{id}/report，与主项目 GetReport 行为对齐（门禁 + 合成报告 + 评估未完成时的提示与均分兜底）。
+// ReportService GET /sessions/{id}/report：状态门禁 + 合成报告 + 评估未完成时给出提示与均分兜底。
 type ReportService struct {
 	sessions repository.InterviewSessionWriter
 }

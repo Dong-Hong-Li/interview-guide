@@ -20,8 +20,8 @@ func NewSessionCache(rdb *redis.Client) repository.InterviewSessionCache {
 	return &SessionCache{rdb: rdb}
 }
 
-// SaveSession 将简历文本、题目 JSON、游标与状态写入 Redis；与 Java sessionCache.saveSession 对齐时
-// 可再写入 interview:resume:{resumeId} → sessionId（此处未接 unfinished 索引时仅写会话体）。
+// SaveSession 将简历文本、题目 JSON、游标与状态写入 Redis；
+// 未完成态会话同时写 interview:resume:{resumeId} → sessionId 索引，供"恢复未完成会话"快速命中。
 func (c *SessionCache) SaveSession(ctx context.Context, sessionID, resumeText string, resumeID *int64, questionsJSON string, currentIndex int, status string, advertisedTotalQuestions *int) error {
 	if c.rdb == nil {
 		return nil
@@ -54,7 +54,7 @@ func (c *SessionCache) SaveSession(ctx context.Context, sessionID, resumeText st
 	if err := c.rdb.Set(ctx, key, payload, 0).Err(); err != nil {
 		return err
 	}
-	// 未完成会话：建立 resumeId → 当前 sessionId，供 findUnfinished 走缓存（与主项目行为一致时启用）
+	// 未完成会话：建立 resumeId → 当前 sessionId 索引，供"恢复未完成会话"接口走缓存命中。
 	if resumeID != nil && st != "COMPLETED" && st != "EVALUATED" {
 		_ = c.rdb.Set(ctx, fmt.Sprintf("interview:resume:%d", *resumeID), sessionID, 0).Err()
 	}

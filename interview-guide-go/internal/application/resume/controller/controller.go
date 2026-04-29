@@ -113,7 +113,7 @@ func (c *ResumeController) reanalyzeResume(ctx context.Context, in model.IDPathR
 	return errmsg.ResumeReanalyzeSuccess, nil
 }
 
-// handleExportAnalysisPDF GET /api/resumes/{id}/export — 返回 application/pdf 二进制（与 Java ResponseEntity<byte[]> 一致）。
+// handleExportAnalysisPDF GET /api/resumes/{id}/export：直接响应 application/pdf 二进制，不走 JSON binding。
 func (c *ResumeController) handleExportAnalysisPDF(w http.ResponseWriter, r *http.Request) {
 	if c.ExportAnalysisPDFService == nil {
 		response.ErrJSON(w, http.StatusServiceUnavailable, errmsg.ExportServiceNotConfigured)

@@ -16,7 +16,7 @@ type ResumeDetailService struct {
 	Logger       *zap.Logger
 }
 
-// NewResumeDetailService 注入持久化、分析队列、对象存储与文本解析；后两者用于与 Java 一致的「无缓存正文时从对象存储重解析并写回」。
+// NewResumeDetailService 注入简历持久化端口；构造简历详情查询服务。
 func NewResumeDetailService(
 	logger *zap.Logger,
 	resumeWriter repository.ResumeWriter,
