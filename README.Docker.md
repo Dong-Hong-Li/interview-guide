@@ -23,7 +23,7 @@ docker compose up --build
 |------|------|
 | `docker compose` | 读取当前目录的 **`compose.yaml`**，管理其中定义的一组服务。 |
 | `up` | 按配置**创建并启动**容器（未创建过的会创建）。 |
-| `--build` | 启动前先**构建**需要 `Dockerfile` 的镜像（**`server`** 的上下文由 **`.env` 的 `SERVER_BUILD_CONTEXT`** 决定，默认 **`./interview-guide-go-take-notes`**）。 |
+| `--build` | 启动前先**构建**需要 `Dockerfile` 的镜像（**`server`** 的上下文由 **`.env` 的 `SERVER_BUILD_CONTEXT`** 决定，默认 **`./interview-guide-go`**）。 |
 | `-d` | **后台**运行（detached），终端不挂日志。 |
 
 示例：
@@ -50,7 +50,7 @@ docker compose down -v
 docker compose up -d postgres redis rustfs
 ```
 
-本机跑 `interview-guide-go` / `interview-guide-go-take-notes` 时，请把连接指向 **localhost** 与下方端口（见 `.env` 示例）。
+本机跑 **`interview-guide-go`** 时，请把连接指向 **localhost** 与下方端口（见 `.env` 示例）。
 
 ---
 
@@ -67,17 +67,17 @@ docker compose up -d postgres redis rustfs
 
 ---
 
-## 前端 `interview-guide` 本地联调
+## 前端 `interview-guide-frontend` 本地联调
 
 - 开发模式一般走 **Vite 代理**：浏览器 **http://localhost:5173**，API 为 **`/api/*`**，默认代理到 **`http://127.0.0.1:8081`**（与上面 Docker 映射一致）。
-- 若后端改在本机 **8080**（例如本机 Delve/`go run`），在 `interview-guide` 下建 **`.env.development`**：`VITE_DEV_PROXY_TARGET=http://127.0.0.1:8080`。
+- 若后端改在本机 **8080**（例如本机 Delve/`go run`），在 **`interview-guide-frontend`** 下建 **`.env.development`**：`VITE_DEV_PROXY_TARGET=http://127.0.0.1:8080`。
 - 也可设置 **`VITE_API_BASE_URL=http://127.0.0.1:8081`**（与代理二选一即可）。
 
 ---
 
 ## PostgreSQL 与初始化脚本
 
-- 首次启动且 **`pgdata` 卷为空**时，会执行挂载的 **`POSTGRES_INIT_SCHEMA_REL_PATH`**（默认仍指向 **`interview-guide-go/internal/db/schema`**，与手写练习版共用 DDL，直到 take-notes 自带 schema）。
+- 首次启动且 **`pgdata` 卷为空**时，会执行挂载的 **`POSTGRES_INIT_SCHEMA_REL_PATH`**（默认指向 **`interview-guide-go/internal/db/schema`**）。
 - **应用内不负责 AutoMigrate**；改 SQL 后若要**重新跑初始化**，需先 `docker compose down -v` 再 `up`（会清空 Postgres 数据）。
 
 ---
@@ -101,13 +101,13 @@ docker compose up -d postgres redis rustfs
 在仓库内指定上下文与 Dockerfile，例如：
 
 ```bash
-docker build -t myapp -f interview-guide-go-take-notes/Dockerfile interview-guide-go-take-notes
+docker build -t myapp -f interview-guide-go/Dockerfile interview-guide-go
 ```
 
 若构建机与运行机 CPU 架构不同（例如在 Apple Silicon 上构建、云上为 amd64）：
 
 ```bash
-docker build --platform=linux/amd64 -t myapp -f interview-guide-go-take-notes/Dockerfile interview-guide-go-take-notes
+docker build --platform=linux/amd64 -t myapp -f interview-guide-go/Dockerfile interview-guide-go
 ```
 
 推送到镜像仓库后按平台文档部署即可。

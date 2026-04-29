@@ -1,4 +1,4 @@
-# 文档索引（`interview-guide-go-take-notes/docs`）
+# 文档索引（`interview-guide-go/docs`）
 
 > 本目录是仓库唯一的文档入口；所有架构、规范、流程描述以本目录为准，**不**抄主项目 Java 后端 `modules/*` 或 `router/router.go` 的目录习惯。
 

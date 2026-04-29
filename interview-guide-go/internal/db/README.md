@@ -11,7 +11,7 @@
 在项目内执行（把连接串换成你的库）：
 
 ```bash
-cd interview-guide-go-take-notes/internal/db
+cd interview-guide-go/internal/db
 chmod +x apply_schema.sh
 export DATABASE_URL='postgres://USER:PASS@HOST:5432/DBNAME?sslmode=disable'
 ./apply_schema.sh

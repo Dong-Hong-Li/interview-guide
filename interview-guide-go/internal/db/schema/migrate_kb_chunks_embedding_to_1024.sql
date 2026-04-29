@@ -2,7 +2,7 @@
 -- 会先删 HNSW 索引、清空分块表（请确认可接受）。
 -- Docker 示例（仓库根目录，服务名 postgres 按 docker compose ps 调整）：
 --   docker compose exec -T postgres psql -U postgres -d interview-guide -v ON_ERROR_STOP=1 -f /dev/stdin \
---     < interview-guide-go-take-notes/internal/db/schema/migrate_kb_chunks_embedding_to_1024.sql
+--     < interview-guide-go/internal/db/schema/migrate_kb_chunks_embedding_to_1024.sql
 
 BEGIN;
 DROP INDEX IF EXISTS public.idx_kb_chunks_embedding;

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// 与前端 interview-guide/src/constants/interviewerRole.ts 中 value 保持一致。
+// 与前端 interview-guide-frontend/src/constants/interviewerRole.ts 中 value 保持一致。
 const (
 	Backend = "BACKEND"
 

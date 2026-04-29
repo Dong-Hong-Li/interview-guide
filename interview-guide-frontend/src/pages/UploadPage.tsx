@@ -49,7 +49,7 @@ export default function UploadPage({ onUploadComplete }: UploadPageProps) {
       const ridNum = Number(data?.storage?.resumeId);
       if (!data?.storage || !Number.isFinite(ridNum) || ridNum < 1) {
         throw new Error(
-          '后端未返回有效的简历 ID（storage.resumeId）。常见原因：① Go 容器仍是旧镜像，请在仓库根目录执行 docker compose up --build；② 未连上数据库或对象存储（看容器日志）；③ 代理未指到 8081，检查 interview-guide/.env.development 中的 VITE_DEV_PROXY_TARGET。',
+          '后端未返回有效的简历 ID（storage.resumeId）。常见原因：① Go 容器仍是旧镜像，请在仓库根目录执行 docker compose up --build；② 未连上数据库或对象存储（看容器日志）；③ 代理未指到 8081，检查 interview-guide-frontend/.env.development 中的 VITE_DEV_PROXY_TARGET。',
         );
       }
 
