@@ -26,10 +26,26 @@ const (
 	kbQueryMaxCosineDistance = 0.72
 	kbQueryLLMTimeout        = 4 * time.Minute
 
-	// kbQuerySystemPrompt 约束模型仅依据检索片段作答（与 Java prompts/knowledgebase-query-system 同意图）。
+	// kbRetrievalLogTopHits 检索汇总日志中带摘要的原始 Top 命中条数（已按距离升序）。
+	kbRetrievalLogTopHits = 5
+	// kbRetrievalPreviewRunes 每条命中打进日志的正文前缀长度（Unicode rune）。
+	kbRetrievalPreviewRunes = 72
+	// kbQueryQuestionPreviewRunes 「开始检索」日志中问题前缀长度，便于与 Embedding 请求对账。
+	kbQueryQuestionPreviewRunes = 48
+
+	// kbQuerySystemPrompt 约束模型仅依据检索片段作答；当用户问题宽泛/多义/仅部分命中资料时，
+	// 必须先基于实际命中的角度作答，再以「说明」段点出未覆盖方向并向用户反问具体场景，
+	// 避免单方向输出后用户得不到真正想要的答案（与 Java prompts/knowledgebase-query-system 同意图，并强化澄清式追问）。
 	kbQuerySystemPrompt = `你是一个严谨的助手，只根据下面给出的「参考资料」回答用户问题。
-若参考资料不足以作出可靠结论，请明确说明无法从资料中推断，不要编造事实。
-回答语言与用户问题一致（多为中文）。可使用 Markdown。`
+
+回答要求：
+1. 仅依据「参考资料」作答，不要编造资料中不存在的事实；回答语言与用户问题一致（多为中文），可使用 Markdown。
+2. 当用户问题表述较宽泛、存在多种含义、或与「参考资料」只有部分匹配时：
+   - 先基于资料中**确实命中**的角度，给出尽可能完整、有条理的回答（按主题分小节，必要时举例）；
+   - 在正文之后追加「说明」小节，**明确指出**资料未覆盖的子方向（例如：不同语义、不同使用场景、不同实现层面、客户端 vs 服务端、构建期 vs 运行期等）；
+   - 然后**主动反问用户**，请其聚焦到具体的子问题/场景，便于后续给出更精准的答案。
+3. 若「参考资料」完全无法支撑作答，请直接说明无法从资料中推断，并反问用户希望了解的具体方向，禁止编造或臆测。
+4. 反问应具体、可选项化（建议列出 2-4 个候选方向供用户选择），避免空泛的「请问您想了解什么？」。`
 
 	kbQueryUserPromptTemplate = `参考资料：
 
@@ -100,7 +116,10 @@ func (s *KnowledgeBaseQueryService) Query(ctx context.Context, v *model.Validate
 		return nil, response.Err(http.StatusBadGateway, errmsg.KnowledgeBaseQueryFailedPrefix+err.Error())
 	}
 	if s.lg != nil {
-		s.lg.Info(logmsg.MsgKnowledgeBaseQueryOK, zap.Int64("primaryKbId", primaryID))
+		s.lg.Info(logmsg.MsgKnowledgeBaseQueryOK,
+			zap.Int64("primaryKbId", primaryID),
+			zap.Int("answerRunes", utf8.RuneCountInString(strings.TrimSpace(answer))),
+		)
 	}
 	return &results.KBQueryResponse{
 		Answer:            strings.TrimSpace(answer),
@@ -194,6 +213,7 @@ func (s *KnowledgeBaseQueryService) buildPrompt(ctx context.Context, v *model.Va
 		s.lg.Info(logmsg.MsgKnowledgeBaseQueryBegin,
 			zap.Any("knowledgeBaseIds", v.KnowledgeBaseIDs),
 			zap.Int("questionRunes", utf8.RuneCountInString(q)),
+			zap.String("questionPreview", truncateRunes(q, kbQueryQuestionPreviewRunes)),
 		)
 	}
 
@@ -209,7 +229,26 @@ func (s *KnowledgeBaseQueryService) buildPrompt(ctx context.Context, v *model.Va
 	if e != nil {
 		return "", "", 0, "", false, e
 	}
-	parts := filterHitsByDistance(hits, kbQueryMaxCosineDistance)
+	parts, rdiag := selectHitContents(hits, kbQueryMaxCosineDistance)
+	if s.lg != nil {
+		fields := []zap.Field{
+			zap.Int("embeddingDim", len(vecs[0])),
+			zap.Int("searchTopK", kbQueryTopK),
+			zap.Float64("maxCosineDistance", kbQueryMaxCosineDistance),
+			zap.Int("rawHitCount", rdiag.RawHitCount),
+			zap.Int("keptChunkCount", rdiag.KeptChunkCount),
+			zap.Int("droppedOverDistance", rdiag.DroppedOverDistance),
+			zap.Int("droppedEmptyContent", rdiag.DroppedEmptyContent),
+			zap.Any("topRawHits", rdiag.TopRawHits),
+		}
+		if rdiag.BestRawDistance != nil {
+			fields = append(fields, zap.Float64("bestRawDistance", *rdiag.BestRawDistance))
+		}
+		if rdiag.WorstKeptDistance != nil {
+			fields = append(fields, zap.Float64("worstKeptDistance", *rdiag.WorstKeptDistance))
+		}
+		s.lg.Info(logmsg.MsgKnowledgeBaseQueryRetrieval, fields...)
+	}
 	if len(parts) == 0 {
 		return kbQuerySystemPrompt, "", primaryID, namesJoined, true, nil
 	}
@@ -218,19 +257,80 @@ func (s *KnowledgeBaseQueryService) buildPrompt(ctx context.Context, v *model.Va
 	return kbQuerySystemPrompt, userPrompt, primaryID, namesJoined, false, nil
 }
 
-func filterHitsByDistance(hits []kbrepo.KnowledgeChunkHit, maxDist float64) []string {
+// kbHitLogPreview 检索汇总日志中单条命中（不做完整正文落日志）。
+type kbHitLogPreview struct {
+	ChunkID    int64   `json:"chunkId"`
+	KBID       int64   `json:"kbId"`
+	ChunkIndex int     `json:"chunkIndex"`
+	Distance   float64 `json:"distance"`
+	Preview    string  `json:"contentPreview"`
+}
+
+// kbRetrievalDiag 距阈值过滤前后的计数，便于判断「无命中」是检索空还是阈值过严。
+type kbRetrievalDiag struct {
+	RawHitCount         int
+	KeptChunkCount      int
+	DroppedOverDistance int
+	DroppedEmptyContent int
+	BestRawDistance     *float64
+	WorstKeptDistance   *float64
+	TopRawHits          []kbHitLogPreview
+}
+
+func selectHitContents(hits []kbrepo.KnowledgeChunkHit, maxDist float64) ([]string, kbRetrievalDiag) {
+	diag := kbRetrievalDiag{
+		RawHitCount: len(hits),
+		TopRawHits:  make([]kbHitLogPreview, 0, min(kbRetrievalLogTopHits, len(hits))),
+	}
+	if len(hits) > 0 {
+		d := hits[0].Distance
+		diag.BestRawDistance = &d
+	}
 	out := make([]string, 0, len(hits))
-	for _, h := range hits {
+	var worstKept float64
+	var haveWorst bool
+	for i, h := range hits {
+		if i < kbRetrievalLogTopHits {
+			diag.TopRawHits = append(diag.TopRawHits, kbHitLogPreview{
+				ChunkID:    h.ChunkID,
+				KBID:       h.KnowledgeBaseID,
+				ChunkIndex: h.ChunkIndex,
+				Distance:   h.Distance,
+				Preview:    truncateRunes(strings.TrimSpace(h.Content), kbRetrievalPreviewRunes),
+			})
+		}
 		if h.Distance > maxDist {
+			diag.DroppedOverDistance++
 			continue
 		}
 		t := strings.TrimSpace(h.Content)
 		if t == "" {
+			diag.DroppedEmptyContent++
 			continue
 		}
 		out = append(out, t)
+		if !haveWorst || h.Distance > worstKept {
+			worstKept = h.Distance
+			haveWorst = true
+		}
 	}
-	return out
+	diag.KeptChunkCount = len(out)
+	if haveWorst {
+		w := worstKept
+		diag.WorstKeptDistance = &w
+	}
+	return out, diag
+}
+
+func truncateRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:max]) + "…"
 }
 
 // writeSSEEvent 输出一条 SSE「事件」：正文含换行时拆成多条 data:，最后以空行结束。

@@ -74,6 +74,8 @@ const (
 	MsgKnowledgeBaseRevectorizeFailed = "知识库重向量化：失败"
 	// MsgKnowledgeBaseQueryBegin 即将对问题做 Embedding 并检索分块（参数含 kbIds、问题长度）。
 	MsgKnowledgeBaseQueryBegin = "知识库问答：开始检索"
+	// MsgKnowledgeBaseQueryRetrieval 向量检索完成后的汇总：条数、距离阈值、Top 命中摘要等（不含完整向量）。
+	MsgKnowledgeBaseQueryRetrieval = "知识库问答：检索汇总"
 	// MsgKnowledgeBaseQueryOK 非流式一次生成完成（含 primaryKbId）。
 	MsgKnowledgeBaseQueryOK = "知识库问答：完成"
 	// MsgKnowledgeBaseQueryFailed Chat Completions 失败或上游网关错误。

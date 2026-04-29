@@ -30,6 +30,8 @@ type Config struct {
 
 	// CorsAllowedOrigins 必填（逗号分隔，见环境变量 CORS_ALLOWED_ORIGINS）；例如本地前端 http://localhost:5173。
 	CorsAllowedOrigins []string
+	// CorsAllowLanViteOrigins 为 true 时（CORS_ALLOW_LAN_VITE_ORIGINS）额外允许常见局域网 Vite 源，见 mergeCORSAllowedOriginsWithLanVite。
+	CorsAllowLanViteOrigins bool
 
 	// 简历上传单文件大小上限
 	MaxResumeUploadBytes int64
@@ -64,18 +66,21 @@ func LoadEnvironmentVariables() *Config {
 	if len(corsAllowedOrigins) == 0 {
 		log.Fatalf("%s: %s", errmsg.LogFatalValidateCORSConfig, errmsg.ConfigCORSAllowedOriginsRequired)
 	}
+	allowLanVite := parseCORSAllowLanViteOrigins()
+	corsAllowedOrigins = mergeCORSAllowedOriginsWithLanVite(corsAllowedOrigins, allowLanVite)
 
 	// 简历上传单文件大小上限
 	maxResumeUploadBytes := parseMaxResumeUploadBytes()
 	return &Config{
-		Server:                *serverConfig,
-		Database:              *databaseConfig,
-		Redis:                 *redisConfig,
-		Storage:               *storageConfig,
-		Openai:                *openaiConfig,
-		HTTPAccessLogSuppress: httpAccessLogSuppress,
-		CorsAllowedOrigins:    corsAllowedOrigins,
-		MaxResumeUploadBytes:  maxResumeUploadBytes,
+		Server:                  *serverConfig,
+		Database:                *databaseConfig,
+		Redis:                   *redisConfig,
+		Storage:                 *storageConfig,
+		Openai:                  *openaiConfig,
+		HTTPAccessLogSuppress:   httpAccessLogSuppress,
+		CorsAllowedOrigins:      corsAllowedOrigins,
+		CorsAllowLanViteOrigins: allowLanVite,
+		MaxResumeUploadBytes:    maxResumeUploadBytes,
 	}
 }
 
@@ -97,6 +102,42 @@ func parseCORSAllowedOrigins() []string {
 		if p != "" {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+// parseCORSAllowLanViteOrigins 读取 CORS_ALLOW_LAN_VITE_ORIGINS（1/true/yes 开启）。生产环境勿开。
+func parseCORSAllowLanViteOrigins() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("CORS_ALLOW_LAN_VITE_ORIGINS")))
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// mergeCORSAllowedOriginsWithLanVite 在开启开关时追加 go-chi/cors 支持的单星通配符源，覆盖手机/局域网访问 Vite（如 http://192.168.2.1:5173）。
+func mergeCORSAllowedOriginsWithLanVite(origins []string, allowLanVite bool) []string {
+	if !allowLanVite {
+		return origins
+	}
+	const (
+		wildcard192 = "http://192.168.*:5173"
+		wildcard10  = "http://10.*:5173"
+	)
+	seen := make(map[string]struct{}, len(origins)+2)
+	for _, o := range origins {
+		seen[strings.ToLower(strings.TrimSpace(o))] = struct{}{}
+	}
+	out := append([]string(nil), origins...)
+	for _, extra := range []string{wildcard192, wildcard10} {
+		key := strings.ToLower(extra)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, extra)
 	}
 	return out
 }

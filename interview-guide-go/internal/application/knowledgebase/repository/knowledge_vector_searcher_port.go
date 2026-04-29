@@ -6,7 +6,9 @@ import (
 
 // KnowledgeChunkHit 单次向量检索命中的一条分块（供 RAG 拼装 context）。
 type KnowledgeChunkHit struct {
+	ChunkID         int64
 	KnowledgeBaseID int64
+	ChunkIndex      int
 	Content         string
 	// Distance 为 pgvector 余弦距离（<=>）；越小越相似，取值约 [0,2]。
 	Distance float64

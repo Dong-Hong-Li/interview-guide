@@ -97,7 +97,11 @@ func (c *Config) corsStartupInfo() map[string]any {
 	if len(c.CorsAllowedOrigins) == 1 && c.CorsAllowedOrigins[0] == "*" {
 		return map[string]any{"mode": "wildcard", "allow_credentials": false}
 	}
-	return map[string]any{"mode": "explicit", "count": len(c.CorsAllowedOrigins)}
+	m := map[string]any{"mode": "explicit", "count": len(c.CorsAllowedOrigins)}
+	if c.CorsAllowLanViteOrigins {
+		m["lan_vite_extra"] = true
+	}
+	return m
 }
 
 // LogStartup 在进程启动时输出一份配置快照（敏感字段已脱敏）。

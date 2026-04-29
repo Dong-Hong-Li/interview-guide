@@ -436,12 +436,14 @@ func (m *KnowledgeBaseMapper) SearchSimilarChunks(ctx context.Context, kbIDs []i
 	}
 	vec := pgvector.NewVector(queryEmbedding)
 	var rows []struct {
+		ID              int64   `gorm:"column:id"`
 		KnowledgeBaseID int64   `gorm:"column:knowledge_base_id"`
+		ChunkIndex      int     `gorm:"column:chunk_index"`
 		Content         string  `gorm:"column:content"`
 		Distance        float64 `gorm:"column:distance"`
 	}
 	err := m.db.WithContext(ctx).Raw(`
-SELECT knowledge_base_id, content,
+SELECT id, knowledge_base_id, chunk_index, content,
        (embedding <=> ?::vector) AS distance
 FROM knowledge_base_chunks
 WHERE knowledge_base_id IN ?
@@ -454,7 +456,9 @@ LIMIT ?
 	out := make([]kbrepo.KnowledgeChunkHit, 0, len(rows))
 	for i := range rows {
 		out = append(out, kbrepo.KnowledgeChunkHit{
+			ChunkID:         rows[i].ID,
 			KnowledgeBaseID: rows[i].KnowledgeBaseID,
+			ChunkIndex:      rows[i].ChunkIndex,
 			Content:         rows[i].Content,
 			Distance:        rows[i].Distance,
 		})

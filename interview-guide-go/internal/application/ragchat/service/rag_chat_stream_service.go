@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	kbmodel "interview-guide-go/internal/application/knowledgebase/model"
 	kbsvc "interview-guide-go/internal/application/knowledgebase/service"
@@ -83,7 +84,12 @@ func (s *RagChatStreamService) StreamSessionMessage(ctx context.Context, session
 		return err
 	}
 	if s.lg != nil {
-		s.lg.Info(logmsg.MsgRagChatStreamOK, zap.Int64("sessionId", sessionID))
+		s.lg.Info(logmsg.MsgRagChatStreamOK,
+			zap.Int64("sessionId", sessionID),
+			zap.Any("knowledgeBaseIds", kbIDs),
+			zap.Int("questionRunes", utf8.RuneCountInString(q)),
+			zap.Int("answerRunes", utf8.RuneCountInString(ans)),
+		)
 	}
 	return nil
 }

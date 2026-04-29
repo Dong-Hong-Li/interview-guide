@@ -146,28 +146,25 @@ export const ragChatApi = {
       const decoder = new TextDecoder();
       let buffer = '';
 
-      // 从 SSE 事件中提取内容
+      // 严格按 W3C SSE 规范解析单个事件块（不含尾部空行）。
+      // 1. 同一事件内的多条 data: 行用 "\n" 连接；
+      // 2. data: 之后若紧跟一个空格，按规范须去掉。
       const extractEventContent = (event: string): string | null => {
-        if (!event.trim()) return null;
-
-        const lines = event.split('\n');
-        const contentParts: string[] = [];
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            // 提取 data: 后面的内容，保留原始格式（包括缩进空格）
-            // ServerSentEvent 不会在 data: 后添加额外空格
-            contentParts.push(line.substring(5));
-          }
+        if (!event) return null;
+        const lines = event.split(/\r?\n/);
+        const dataLines: string[] = [];
+        for (const raw of lines) {
+          if (!raw.startsWith('data:')) continue;
+          let value = raw.slice(5);
+          if (value.startsWith(' ')) value = value.slice(1);
+          dataLines.push(value);
         }
-
-        if (contentParts.length === 0) return null;
-
-        // 合并内容并还原转义的换行符
-        return contentParts.join('')
-          .replace(/\\n/g, '\n')
-          .replace(/\\r/g, '\r');
+        if (dataLines.length === 0) return null;
+        return dataLines.join('\n');
       };
+
+      // 事件以 \n\n 或 \r\n\r\n 结束（兼容两种换行）。
+      const eventDelimiter = /\r?\n\r?\n/;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -175,7 +172,7 @@ export const ragChatApi = {
         if (done) {
           if (buffer) {
             const content = extractEventContent(buffer);
-            if (content) {
+            if (content !== null) {
               onMessage(content);
             }
           }
@@ -185,29 +182,14 @@ export const ragChatApi = {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // SSE 事件以 \n\n 分隔，但也需要处理单行的情况
-        let newlineIndex = buffer.indexOf('\n\n');
-        if (newlineIndex === -1) {
-          // 如果没有找到 \n\n，尝试处理单行 data: 格式
-          const singleLineIndex = buffer.indexOf('\n');
-          if (singleLineIndex !== -1 && buffer.substring(0, singleLineIndex).startsWith('data:')) {
-            const line = buffer.substring(0, singleLineIndex);
-            const content = extractEventContent(line);
-            if (content) {
-              onMessage(content);
-            }
-            buffer = buffer.substring(singleLineIndex + 1);
+        let match: RegExpExecArray | null;
+        while ((match = eventDelimiter.exec(buffer)) !== null) {
+          const eventBlock = buffer.slice(0, match.index);
+          buffer = buffer.slice(match.index + match[0].length);
+          const content = extractEventContent(eventBlock);
+          if (content !== null) {
+            onMessage(content);
           }
-          continue;
-        }
-
-        // 处理完整的事件块
-        const eventBlock = buffer.substring(0, newlineIndex);
-        buffer = buffer.substring(newlineIndex + 2);
-
-        const content = extractEventContent(eventBlock);
-        if (content !== null) {
-          onMessage(content);
         }
       }
     } catch (error) {

@@ -35,7 +35,7 @@ const (
 	ConfigResumeAIMaxTokensInvalid            = "RESUME_AI_MAX_COMPLETION_TOKENS 无效，须为正整数"
 	ConfigResumeAITemperatureInvalid          = "RESUME_AI_TEMPERATURE 无效，须为不小于 0 的数"
 
-	ConfigCORSAllowedOriginsRequired = "未设置 CORS_ALLOWED_ORIGINS（逗号分隔；开发可设为 http://localhost:5173）"
+	ConfigCORSAllowedOriginsRequired = "未设置 CORS_ALLOWED_ORIGINS（逗号分隔；开发可设为 http://localhost:5173；若用局域网 IP 打开前端可追加 http://192.168.*:5173 或设 CORS_ALLOW_LAN_VITE_ORIGINS=1）"
 
 	ConfigStartupSnapshotMarshalFail = "启动时序列化配置快照失败"
 )
