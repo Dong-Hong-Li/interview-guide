@@ -1,4 +1,4 @@
-# interview-guide（前端）
+# interview-guide-frontend（前端）
 
 Vite + React + TypeScript。开发时通过 **环境变量** 配置 API 代理，仓库里**不提交** `.env.development`（每人本机一份）。
 

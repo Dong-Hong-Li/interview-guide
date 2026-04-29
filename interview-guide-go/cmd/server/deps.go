@@ -79,7 +79,7 @@ func StartDeps(ctx context.Context, lg *zap.Logger, cfg *config.Config) ([]https
 	// ── 异步：简历分析 Redis Stream 消费者
 	startResumeAnalyzeConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, mapper.NewResumeMapper(postgresService.DB))
 
-	// ── 异步：面试 LLM 评估（最后一题后 evaluate_status=PENDING + 入队；与主项目 take-notes 能力对齐）
+	// ── 异步：面试 LLM 评估（最后一题后 evaluate_status=PENDING + 入队；与主项目 Java 版能力对齐）
 	startInterviewEvaluateConsumerIfReady(ctx, cfg, lg, redisService, oaSvc, postgresService)
 
 	// ── 异步：知识库向量化（Upload 后入队 knowledge:vectorize:stream；消费者分块→Embedding→knowledge_base_chunks）
