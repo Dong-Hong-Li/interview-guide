@@ -98,8 +98,8 @@ func loadResumePromptPair(interviewerRole string) (system string, userTemplate s
 		c := v.(cachedPrompts)
 		return c.system, c.user, nil
 	}
-	sysPath := fmt.Sprintf("prompts/%s/resume-analysis-system.st", sub)
-	userPath := fmt.Sprintf("prompts/%s/resume-analysis-user.st", sub)
+	sysPath := fmt.Sprintf("prompts/resume/%s/resume-analysis-system.st", sub)
+	userPath := fmt.Sprintf("prompts/resume/%s/resume-analysis-user.st", sub)
 
 	// 读取系统提示词
 	sysBytes, err := fs.ReadFile(aicore.PromptsRoot, sysPath)
@@ -117,7 +117,7 @@ func loadResumePromptPair(interviewerRole string) (system string, userTemplate s
 }
 
 // Grade 调用 LLM 并解析 JSON；ctx 用于取消与超时（建议调用方带 timeout）。
-// interviewerRole 为 promptprofile 常量（BACKEND / FRONTEND），决定加载 prompts/<subdir>/ 下模板。
+// interviewerRole 为 promptprofile 常量（BACKEND / FRONTEND），决定加载 prompts/resume/<subdir>/ 下模板。
 func (g *ResumeGrader) Grade(ctx context.Context, resumeText string, interviewerRole string) (*AnalysisScores, error) {
 	// 去除空格
 	text := strings.TrimSpace(resumeText)

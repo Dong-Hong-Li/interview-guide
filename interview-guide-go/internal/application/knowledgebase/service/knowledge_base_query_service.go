@@ -213,7 +213,7 @@ func (s *KnowledgeBaseQueryService) buildPrompt(ctx context.Context, v *model.Va
 		s.lg.Info(logmsg.MsgKnowledgeBaseQueryBegin,
 			zap.Any("knowledgeBaseIds", v.KnowledgeBaseIDs),
 			zap.Int("questionRunes", utf8.RuneCountInString(q)),
-			zap.String("questionPreview", truncateRunes(q, kbQueryQuestionPreviewRunes)),
+			zap.String("questionPreview", truncateRunes(q, kbQueryQuestionPreviewRunes)),		
 		)
 	}
 
