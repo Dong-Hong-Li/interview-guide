@@ -108,6 +108,8 @@ func (s *KnowledgeBaseQueryService) Query(ctx context.Context, v *model.Validate
 			KnowledgeBaseName: namesJoined,
 		}, nil
 	}
+
+	// 调用 chat.Complete 方法生成答案
 	answer, err := s.chat.Complete(workCtx, sys, user)
 	if err != nil {
 		if s.lg != nil {
@@ -149,6 +151,7 @@ func (s *KnowledgeBaseQueryService) QueryStream(ctx context.Context, v *model.Va
 		}
 		return writeSSEEvent(w, flush, msg)
 	}
+	// 调用 chat.Stream 方法生成答案
 	err = s.chat.Stream(workCtx, sys, user, func(fragment string) error {
 		if assistantAccumulator != nil {
 			assistantAccumulator.WriteString(fragment)
@@ -213,7 +216,7 @@ func (s *KnowledgeBaseQueryService) buildPrompt(ctx context.Context, v *model.Va
 		s.lg.Info(logmsg.MsgKnowledgeBaseQueryBegin,
 			zap.Any("knowledgeBaseIds", v.KnowledgeBaseIDs),
 			zap.Int("questionRunes", utf8.RuneCountInString(q)),
-			zap.String("questionPreview", truncateRunes(q, kbQueryQuestionPreviewRunes)),		
+			zap.String("questionPreview", truncateRunes(q, kbQueryQuestionPreviewRunes)),
 		)
 	}
 

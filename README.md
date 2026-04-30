@@ -159,6 +159,4 @@ pnpm dev
 - 新增/删除/重命名文档 → 同步本 README §7「文档地图」与 `interview-guide-go/docs/README.md` 的「文档清单」；
 - `interview-guide-go/docs/开发进度.md` 第 6 行的「文档同步日期」在合并日更新；
 - 端口/服务名/镜像名变更 → 同步本 README §4 与 `README.Docker.md`；
-- 业务语义（接口形状、状态机、错误文案）以**主项目 Java 后端**为对齐基准；实现细节以本仓库代码为准；冲突时优先级：**代码 > `开发进度.md` > `项目架构.md` > 主项目 Java 文档**。
-
 ---
