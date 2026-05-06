@@ -150,6 +150,7 @@ pnpm dev
 | 分支/提交/PR/CI/部署/回滚流程 | [`interview-guide-go/docs/项目管理.md`](./interview-guide-go/docs/项目管理.md) |
 | 当前已实现 / 占位 / 与主项目 Java 后端的差异对账 | [`interview-guide-go/docs/开发进度.md`](./interview-guide-go/docs/开发进度.md) |
 | Go 后端文档总览 | [`interview-guide-go/docs/README.md`](./interview-guide-go/docs/README.md) |
+| Docker 镜像构建失败排查与 Scout CVE 纪要 | [`interview-guide-go/docs/Docker镜像构建与安全扫描纪要.md`](./interview-guide-go/docs/Docker镜像构建与安全扫描纪要.md) |
 
 ---
 

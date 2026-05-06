@@ -6,6 +6,7 @@
 
 - **`compose.yaml` 不写死业务配置**：镜像名、端口、卷路径、`server` 的构建路径等，一律写成 **`${VAR}`**，值只来自**系统环境**或仓库根目录的 **`.env`**（Compose 会自动读取该文件做插值）。
 - **应用进程环境**：`server` 服务使用 **`env_file`**，按顺序加载 **`.env`** 再加载 **`.env.docker`**（后者覆盖前者）。本机 `go run` / 调试一般只读 `.env`（连 `localhost`）；容器内需要连 `postgres` / `redis` / `rustfs` 服务名，由 **`.env.docker`** 覆盖连接串。
+- **可选 `ENV_FILE`（进程内读文件）**：若设置了 **`ENV_FILE=/容器内路径/…`**（如 `/config/.env`），进程启动时用 `godotenv` **从该路径加载** dotenv **仅补充**尚未设置的环境变量（**不会覆盖**已为进程配置的变量）。**`docker compose` 仍推荐使用 `env_file`**，本条主要给 **`docker run` / Docker Desktop 只挂配置文件**不用写一串 `-e` 的场景：**`-e ENV_FILE=/config/.env -v "$(pwd)/.env:/config/.env:ro"`**；若在 compose 网络上跑，宿主文件内容需等价于 `.env` 与 `.env.docker` 的合并结果（或自行合并为单文件后再挂载）。
 - 修改 **`POSTGRES_PASSWORD`** 时，请同时改 **`.env`**、**`.env.docker`** 里带密码的 **`DATABASE_URL`**，保持一致。
 
 ## 一键启动

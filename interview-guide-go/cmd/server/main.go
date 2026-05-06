@@ -26,6 +26,10 @@ func main() {
 	defer func() { _ = lg.Sync() }()
 	// =========================
 
+	// 可选：从 ENV_FILE 指向的 dotenv 文件补充环境变量（不覆盖 Compose / -e 已注入的变量）
+	if err := config.LoadDotEnvOptional(); err != nil {
+		log.Fatal(err)
+	}
 	// 加载环境变量
 	cfg := config.LoadEnvironmentVariables()
 	cfg.LogStartup(lg) // 输出配置快照

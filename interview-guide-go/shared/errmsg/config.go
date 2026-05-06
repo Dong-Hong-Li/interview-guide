@@ -48,6 +48,7 @@ const (
 	LogFatalValidateStorageConfig  = "[配置] 校验 storage 失败"
 	LogFatalValidateOpenAIConfig   = "[配置] 校验 openai 失败"
 	LogFatalValidateCORSConfig     = "[配置] 校验 CORS 失败"
+	LogFatalLoadEnvFile            = "[配置] 加载 ENV_FILE（dotenv 配置文件）失败"
 )
 
 // 配置为空时的错误文案。
